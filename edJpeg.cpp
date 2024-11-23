@@ -4,6 +4,8 @@
 #include <vector>
 #include <cstdlib>
 #include <algorithm>
+#include "edJpeg.h"
+#include "utils.h"
 
 bool decompressJPEG(const char *filename, std::vector<unsigned char> &imgBuf, int &width, int &height)
 {
@@ -58,12 +60,11 @@ std::vector<unsigned char> convertRGBToGray(const std::vector<unsigned char> &rg
     return grayBuffer;
 }
 
-bool compressJPEG(const char *outputFilename, unsigned char *imgBuf, int width, int height, int quality = 75)
+bool compressJPEG(const char *outputFilename, unsigned char *imgBuf, int width, int height, int quality)
 {
     tjhandle handle = tjInitCompress();
     if (!handle)
         return false;
-    
 
     unsigned char *jpegBuf = nullptr;
     unsigned long jpegSize = 0;
@@ -91,7 +92,7 @@ bool compressJPEG(const char *outputFilename, unsigned char *imgBuf, int width, 
     return true;
 }
 
-bool compressGrayscaleJPEG(const char *outputFilename, unsigned char *imgBuf, int width, int height, int quality = 75)
+bool compressGrayscaleJPEG(const char *outputFilename, unsigned char *imgBuf, int width, int height, int quality)
 {
     tjhandle handle = tjInitCompress();
     if (!handle)
@@ -122,9 +123,9 @@ bool compressGrayscaleJPEG(const char *outputFilename, unsigned char *imgBuf, in
     return true;
 }
 
-std::vector<unsigned char> createMask(int width, int height, float range, bool left = false, bool right = true)
+std::vector<unsigned char> createMask(int width, int height, float range, bool left, bool right)
 {
-    std::vector<unsigned char> grayBuffer(width * height, 0);
+    std::vector<unsigned char> grayBuffer(width * height, 255);
     if (!(left || right))
         return grayBuffer;
 
@@ -135,7 +136,7 @@ std::vector<unsigned char> createMask(int width, int height, float range, bool l
         for (int i = 0; i < cut; ++i)
         {
             for (int j = 0; j < height; j++)
-                grayBuffer[i + width * j] = 255;
+                grayBuffer[i + width * j] = 0;
         }
     }
 
@@ -144,13 +145,104 @@ std::vector<unsigned char> createMask(int width, int height, float range, bool l
         for (int i = 0; i < cut; ++i)
         {
             for (int j = 0; j < height; j++)
-                grayBuffer[(width - i - 1) + width * j] = 255;
+                grayBuffer[(width - i - 1) + width * j] = 0;
         }
     }
 
     return grayBuffer;
 }
 
+std::vector<unsigned char> createVerticalMask(int width, int height, float range, bool top, bool bottom)
+{
+    std::vector<unsigned char> grayBuffer(width * height, 255);
+    if (!(top || bottom))
+        return grayBuffer;
+
+    int cut = static_cast<int>(range * height * width);
+
+    if (top)
+    {
+        std::fill(grayBuffer.begin(), grayBuffer.begin() + cut, 0);
+    }
+
+    if (bottom)
+    {
+        std::fill(grayBuffer.end() - cut, grayBuffer.end(), 0);
+    }
+
+    return grayBuffer;
+}
+
+void addBorderToImage(std::vector<unsigned char> &img, int &width, int &height,
+                      int borderTop, int borderBottom, int borderLeft, int borderRight,
+                      int channels, BorderType borderType)
+{
+    // Define a constant border color (default to black/zero for all channels)
+    std::vector<unsigned char> borderColor(channels, 0);
+
+    // Calculate new dimensions
+    int newWidth = width + borderLeft + borderRight;
+    int newHeight = height + borderTop + borderBottom;
+
+    // Create a new image buffer
+    std::vector<unsigned char> borderedImage(newWidth * newHeight * channels, 0);
+
+    // Fill the bordered image based on the border type
+    for (int y = 0; y < newHeight; ++y)
+    {
+        for (int x = 0; x < newWidth; ++x)
+        {
+            int newIdx = (y * newWidth + x) * channels;
+
+            if (x >= borderLeft && x < (width + borderLeft) && y >= borderTop && y < (height + borderTop))
+            {
+                // Copy the original image pixels
+                int origX = x - borderLeft;
+                int origY = y - borderTop;
+                int origIdx = (origY * width + origX) * channels;
+
+                for (int c = 0; c < channels; ++c)
+                {
+                    borderedImage[newIdx + c] = img[origIdx + c];
+                }
+            }
+            else if (borderType == BORDER_CONSTANT)
+            {
+                // Set constant border color
+                for (int c = 0; c < channels; ++c)
+                {
+                    borderedImage[newIdx + c] = borderColor[c];
+                }
+            }
+            else if (borderType == BORDER_REFLECT)
+            {
+                // Reflect border pixels
+                int origX = std::clamp(x - borderLeft, 0, width - 1);
+                if (x < borderLeft)
+                    origX = borderLeft - x - 1;
+                if (x >= (width + borderLeft))
+                    origX = width - (x - (width + borderLeft)) - 1;
+
+                int origY = std::clamp(y - borderTop, 0, height - 1);
+                if (y < borderTop)
+                    origY = borderTop - y - 1;
+                if (y >= (height + borderTop))
+                    origY = height - (y - (height + borderTop)) - 1;
+
+                int origIdx = (origY * width + origX) * channels;
+
+                for (int c = 0; c < channels; ++c)
+                {
+                    borderedImage[newIdx + c] = img[origIdx + c];
+                }
+            }
+        }
+    }
+
+    img = std::move(borderedImage);
+    width = newWidth;
+    height = newHeight;
+}
 
 // //g++-14 -o libjpegtest -I/usr/local/include -L/usr/local/lib -lturbojpeg  libjpegtest.cpp
-//  g++-14 -o stitch -I/usr/local/include -L/usr/local/lib -lturbojpeg  stitch.cpp laplaceBlending.cpp edJpeg.cpp  && ./stitch 
+//  g++-14 -o stitch -I/usr/local/include -L/usr/local/lib -lturbojpeg  stitch.cpp laplaceBlending.cpp edJpeg.cpp  && ./stitch

@@ -2,3 +2,7 @@ files/*
 *.jpeg
 *.jpg
 *.png
+stitch.dSYM/*
+stitch
+.vscode
+.DS_Store
