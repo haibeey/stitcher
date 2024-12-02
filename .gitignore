@@ -6,3 +6,5 @@ stitch.dSYM/*
 stitch
 .vscode
 .DS_Store
+libjpeg-turbo/*
+libjpeg-turbo
