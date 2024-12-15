@@ -8,3 +8,7 @@ stitch
 .DS_Store
 libjpeg-turbo/*
 libjpeg-turbo
+builds
+builds/*
+installs
+installs/*

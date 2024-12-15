@@ -1,173 +1,109 @@
+#define BANDS 5
 
-#include <vector>
-#include <cmath>
-#include <thread>
-
-const int BANDS = 5;
-
-struct Image
+typedef struct
 {
-    std::vector<unsigned char> data;
+    unsigned char *data;
     int width;
     int height;
     int channels;
+} Image;
 
-    Image() : data(), width(0), height(0), channels(0) {}
+Image *create_image(const char *filename);
+Image *create_image_mask(int width, int height, float range, int left, int right);
+int save_image(Image *img, char *out_filename);
+int image_size(Image *img);
+void destroy_image(Image *img);
+Image upsample(Image *img);
+Image downsample(Image *img);
+Image compute_laplacian(Image *original, Image *upsampled);
 
-    Image(std::vector<unsigned char> _data, int _width, int _height, int _channels)
-        : data(std::move(_data)), width(_width), height(_height), channels(_channels) {}
-
-    ~Image() = default;
-
-    Image(const Image &other)
-        : data(other.data), width(other.width), height(other.height), channels(other.channels) {}
-
-    Image &operator=(const Image &other)
-    {
-        if (this != &other)
-        {
-            data = other.data;
-            width = other.width;
-            height = other.height;
-            channels = other.channels;
-        }
-        return *this;
-    }
-
-    Image(Image &&other) noexcept
-        : data(std::move(other.data)), width(other.width), height(other.height), channels(other.channels) {}
-
-    Image &operator=(Image &&other) noexcept
-    {
-        if (this != &other)
-        {
-            data = std::move(other.data);
-            width = other.width;
-            height = other.height;
-            channels = other.channels;
-        }
-        return *this;
-    }
-
-    size_t size() const
-    {
-        return width * height * channels;
-    }
-};
-
-struct Point
+typedef struct
 {
     int x;
     int y;
-    Point(int _x, int _y) : x(_x), y(_y) {}
+} Point;
 
-    void print()
-    {
-        std::cout << x << " " << y << "\n";
-    }
-};
-
-struct Rect
+typedef struct
 {
     int x;
     int y;
     int width;
     int height;
-    Point br()
-    {
-        return Point(x + width, y + height);
-    }
+} Rect;
 
-    Rect(int _x, int _y, int _width, int _height) : x(_x), y(_y), width(_width), height(_height) {}
-    Rect() : x(0), y(0), width(0), height(0) {}
+Point br(Rect r);
+Rect create_rect(int x, int y, int width, int height);
 
-    void print()
-    {
-        std::cout << x << " " << y << " " << width << " " << height << "\n";
-    }
-
-    Rect(const Rect &) = default;
-    Rect &operator=(const Rect &) = default;
-};
-
-class Blender
+typedef struct
 {
-
-public:
-    Blender(Rect out_size, int nb = BANDS)
-    {
-        num_bands = nb;
-        output_size = out_size;
-        double max_len = static_cast<double>(std::max(output_size.width, output_size.height));
-        num_bands = std::min(num_bands, static_cast<int>(ceil(std::log(max_len) / std::log(2.0))));
-        output_size.width += ((1 << num_bands) - output_size.width % (1 << num_bands)) % (1 << num_bands);
-        output_size.height += ((1 << num_bands) - output_size.height % (1 << num_bands)) % (1 << num_bands);
-        out.resize(num_bands + 1);
-        outMask.resize(num_bands + 1);
-        out[0] = Image(std::vector<unsigned char>(output_size.height * output_size.width * 3, 0), output_size.width, output_size.height, 3);
-        outMask[0] = Image(std::vector<unsigned char>(output_size.height * output_size.width, 0), output_size.width, output_size.height, 1);
-        outHeightLevels.push_back(output_size.height);
-        outWidthLevels.push_back(output_size.width);
-        for (int i = 1; i <= num_bands; i++)
-        {
-            outWidthLevels.push_back((outWidthLevels[i - 1] + 1) / 2);
-            outHeightLevels.push_back((outHeightLevels[i - 1] + 1) / 2);
-
-            long size = outWidthLevels[i] * outHeightLevels[i];
-            out[i] = Image(std::vector<unsigned char>(size * 3, 0), outWidthLevels[i], outHeightLevels[i], 3);
-            outMask[i] = Image(std::vector<unsigned char>(size, 0), outWidthLevels[i], outHeightLevels[i], 1);
-        }
-    }
-
-    int numBands() const { return num_bands; }
-    void setNumBands(int val) { num_bands = val; }
-
-    void feed(Image img, Image mask, Point tl);
-    void blend();
-    Image result()
-    {
-        return out[0];
-    }
-    int outHeight()
-    {
-        return output_size.height;
-    }
-
-    int outWidth()
-    {
-        return output_size.width;
-    }
-
-    ~Blender()
-    {
-        for (auto &vec : out)
-        {
-            vec.data.clear();
-            vec.data.shrink_to_fit();
-        }
-        out.clear();
-        out.shrink_to_fit();
-
-        for (auto &vec : outMask)
-        {
-            vec.data.clear();
-            vec.data.shrink_to_fit();
-        }
-        outMask.clear();
-        outMask.shrink_to_fit();
-    }
-
-private:
-    int numThreads = std::max(1,static_cast<int>(std::thread::hardware_concurrency()));
     int num_bands;
     Rect output_size;
-    std::vector<int> outWidthLevels;
-    std::vector<int> outHeightLevels;
+    int *out_width_levels;
+    int *out_height_levels;
+    Image **out;
+    Image **out_mask;
+    Image *result;
+} Blender;
 
-    std::vector<Image> out;
-    std::vector<Image> outMask;
-};
+Blender *create_blender(Rect out_size, int nb);
+void feed(Blender *b, Image *img, Image *maskImg, Point tl);
+void blend(Blender *b);
+void destroy_blender(Blender *blender);
 
-Image upsample(Image img);
-Image downsample(const Image &img);
-Image computeLaplacian(Image original, Image upsampled);
+typedef struct
+{
+    int start_row;
+    int end_row;
+    int new_width;
+    int new_height;
+    Image *img;
+    unsigned char *sampled;
+} SamplingThreadData;
+
+typedef struct
+{
+    unsigned char *original_data;
+    unsigned char *upsampled_data;
+    unsigned char *laplacian_data;
+    int total_size;
+    int start_index;
+    int end_index;
+} LaplacianWorkerArgs;
+
+typedef struct
+{
+    int start_row;
+    int end_row;
+    int rows;
+    int cols;
+    int x_tl;
+    int y_tl;
+    int out_level_width;
+    int out_level_height;
+    int level_width;
+    int level_height;
+    int level;
+    Image *img_laplacians;
+    Image *mask_gaussian;
+    Image **out;
+    Image **out_mask;
+} FeedWorkerArgs;
+
+typedef struct
+{
+    int start_row;
+    int end_row;
+    int output_width;
+    int level;
+    Image **out;
+    Image **out_mask;
+} NormalizeWorkerArgs;
+
+typedef struct
+{
+    int start_index;
+    int end_index;
+    int out_size;
+    Image *blended_image;
+    Image *out_level;
+} BlendWorkerArgs;
