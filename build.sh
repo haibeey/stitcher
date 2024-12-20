@@ -8,14 +8,12 @@ CWD=$PWD
 
 build_libturbojpeg_macos() {
   echo "Building libjpeg-turbo for macOS..."
-  echo $MACOS_ARCHS
   for ARCH in x86_64 arm64; do
     BUILD_DIR="$BUILD_DIR_LIB_TURBOJPEG/macos/$ARCH"
     INSTALL_DIR="$INSTALL_DIR_LIB_TURBOJPEG/macos/$ARCH"
     mkdir -p "$BUILD_DIR"
     pushd "$BUILD_DIR"
 
-    # Determine target flag based on architecture
     if [ "$ARCH" == "arm64" ]; then
       TARGET_FLAG="-target arm64-apple-macos11"
     elif [ "$ARCH" == "x86_64" ]; then
@@ -34,9 +32,7 @@ build_libturbojpeg_macos() {
       -DCMAKE_SYSTEM_PROCESSOR=$ARCH \
       -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" \
       -DCMAKE_C_COMPILER=$(xcrun --sdk macosx --find clang) \
-      -DCMAKE_C_FLAGS="$TARGET_FLAG" \
-      -DCMAKE_CXX_COMPILER=$(xcrun --sdk macosx --find clang++) \
-      -DCMAKE_CXX_FLAGS="$TARGET_FLAG"
+      -DCMAKE_C_FLAGS="$TARGET_FLAG"
 
     make -j$(sysctl -n hw.logicalcpu)
     make install
@@ -117,16 +113,28 @@ build_libturbojpeg_ios_simulators() {
 build_native_sticher_macos(){
     build_libturbojpeg_macos
     
-    for ARCH in x86_64; do
+    for ARCH in arm64 x86_64; do
+      if [ "$ARCH" == "arm64" ]; then
+        TARGET_FLAG="-target arm64-apple-macos11"
+      elif [ "$ARCH" == "x86_64" ]; then
+        TARGET_FLAG="-target x86_64-apple-macos11"
+      else
+        echo "Unsupported architecture: $ARCH"
+        popd
+        continue
+      fi
       BUILD_DIR="$BUILD_DIR_LIB_NATIVE_STITCHER/macos/$ARCH"
       INSTALL_DIR="$INSTALL_DIR_LIB_NATIVE_STITCHER/macos/$ARCH"
       mkdir -p "$BUILD_DIR"
       pushd "$BUILD_DIR"
         cmake $CWD \
           -G"Unix Makefiles" \
+          -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0 \
           -DLIBJPEG_TURBO_ROOT=$CWD/installs/libturbojpeg/macos/$ARCH \
           -DCMAKE_SYSTEM_PROCESSOR=$ARCH \
-          -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR"
+          -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" \
+          -DCMAKE_C_COMPILER=$(xcrun --sdk macosx --find clang) \
+          -DCMAKE_C_FLAGS="$TARGET_FLAG"
         make -j$(sysctl -n hw.logicalcpu)
       popd
     done
