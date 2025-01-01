@@ -14,6 +14,6 @@ void add_border_to_image(unsigned char** img, int* width, int* height,
                       int borderTop, int borderBottom, int borderLeft, int borderRight,
                       int channels, BorderType borderType);
 
-void crop_image(unsigned char **img, int *width, int *height,
-                         int cut_top, int cut_bottom, int cut_left, int cut_right,
-                         int channels);
+void crop_image_buf(unsigned char **img, int *width, int *height,
+                int cut_top, int cut_bottom, int cut_left, int cut_right,
+                int channels);

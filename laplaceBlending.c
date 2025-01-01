@@ -71,6 +71,11 @@ int save_image(Image *img, char *out_filename)
     }
 }
 
+void crop_image(Image *img, int cut_top, int cut_bottom, int cut_left, int cut_right)
+{
+    crop_image_buf(&img->data, &img->width, &img->height, cut_top, cut_bottom, cut_left, cut_right, img->channels);
+}
+
 void destroy_image(Image *img)
 {
     if (img)
@@ -185,8 +190,7 @@ void destroy_blender(Blender *blender)
     {
         destroy_image(blender->result);
     }
-    
-     
+
     free(blender);
 }
 
@@ -671,7 +675,7 @@ void blend(Blender *b)
 
     for (int level = b->num_bands; level > 0; --level)
     {
-         ubi = upsample(blended_image);
+        ubi = upsample(blended_image);
         blended_image = &ubi;
 
         int out_size = image_size(b->out[level - 1]);

@@ -16,6 +16,7 @@ void destroy_image(Image *img);
 Image upsample(Image *img);
 Image downsample(Image *img);
 Image compute_laplacian(Image *original, Image *upsampled);
+void crop_image(Image *img, int cut_top, int cut_bottom, int cut_left, int cut_right);
 
 typedef struct
 {

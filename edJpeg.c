@@ -308,9 +308,36 @@ void add_border_to_image(unsigned char **img, int *width, int *height,
     free(borderColor);
 }
 
-void crop_image(unsigned char **img, int *width, int *height,
+void crop_image_buf(unsigned char **img, int *width, int *height,
                 int cut_top, int cut_bottom, int cut_left, int cut_right,
                 int channels)
 {
+    int new_width = *width - cut_left - cut_right;
+    int new_height = *height - cut_top - cut_bottom;
 
+    if (new_width <= 0 || new_height <= 0) {
+        free(*img);
+        *img = NULL;
+        *width = 0;
+        *height = 0;
+        return;
+    }
+
+    unsigned char *cropped = (unsigned char *)malloc(new_width * new_height * channels);
+
+    if (!cropped) {
+        return; 
+    }
+
+    for (int y = 0; y < new_height; y++) {
+        int src_y = y + cut_top;
+        int src_offset = (src_y * (*width) + cut_left) * channels;
+        int dest_offset = y * new_width * channels;
+        memcpy(cropped + dest_offset, (*img) + src_offset, new_width * channels);
+    }
+
+    free(*img);
+    *img = cropped;
+    *width = new_width;
+    *height = new_height;
 }

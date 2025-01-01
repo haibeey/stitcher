@@ -3,14 +3,13 @@
 #include <stdio.h>
 #include "laplaceBlending.h"
 #include "edJpeg.h"
+#include "utils.h"
 
 int main()
 {
-    
 
     Image *img_buf1 = create_image("../files/bottom1.jpg");
     Image *img_buf2 = create_image("../files/bottom2.jpg");
-
 
     Image *mask1 = create_image_mask(img_buf1->width, img_buf1->height, 0.1f, 0, 1);
     Image *mask2 = create_image_mask(img_buf2->width, img_buf2->height, 0.1f, 1, 0);
@@ -26,7 +25,9 @@ int main()
     feed(b, img_buf2, mask2, pt2);
     blend(b);
 
-    if (save_image(b->result,"merge.jpg"))
+    crop_image(b->result, 0, 0, 0, 100);
+
+    if (save_image(b->result, "merge.jpg"))
     {
         printf("Merged image  saved \n");
     }
