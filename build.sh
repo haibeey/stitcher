@@ -41,6 +41,7 @@ build_macos() {
     BUILD_DIR="$BUILD_DIR_LIB_NATIVE_STITCHER/macos/$ARCH"
     INSTALL_DIR="$INSTALL_DIR_LIB_NATIVE_STITCHER/macos/$ARCH"
     mkdir -p "$BUILD_DIR"
+    mkdir -p "$INSTALL_DIR"
     pushd "$BUILD_DIR"
       cmake $CWD \
         -G"Unix Makefiles" \
@@ -51,6 +52,7 @@ build_macos() {
         -DCMAKE_C_COMPILER=$(xcrun --sdk macosx --find clang) \
         -DCMAKE_C_FLAGS="$TARGET_FLAG"
       make -j$(sysctl -n hw.logicalcpu)
+      make install
     popd    
   done
 }
@@ -105,6 +107,7 @@ build_android() {
     BUILD_DIR="$BUILD_DIR_LIB_NATIVE_STITCHER/andriod/$ARCH"
     INSTALL_DIR="$INSTALL_DIR_LIB_NATIVE_STITCHER/andriod/$ARCH"
     mkdir -p "$BUILD_DIR"
+    mkdir -p "$INSTALL_DIR"
     pushd "$BUILD_DIR"
       cmake $CWD \
         -G"Unix Makefiles" \
@@ -117,6 +120,7 @@ build_android() {
         -DCMAKE_C_FLAGS="$TARGET_FLAG" \
         -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK/build/cmake/android.toolchain.cmake 
       make -j$(sysctl -n hw.logicalcpu)
+      make install
     popd
 
   done
@@ -151,6 +155,7 @@ build_ios() {
     BUILD_DIR="$BUILD_DIR_LIB_NATIVE_STITCHER/ios/$ARCH"
     INSTALL_DIR="$INSTALL_DIR_LIB_NATIVE_STITCHER/ios/$ARCH"
     mkdir -p "$BUILD_DIR"
+    mkdir -p "$INSTALL_DIR"
     pushd "$BUILD_DIR"
       cmake $CWD \
         -G"Unix Makefiles" \
@@ -159,8 +164,10 @@ build_ios() {
         -DCMAKE_SYSTEM_NAME=iOS \
         -DCMAKE_OSX_SYSROOT=${IOS_SYSROOT[0]} \
         -DCMAKE_C_FLAGS="-target arm64-apple-ios12.0" \
+        -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" \
         -DCMAKE_C_COMPILER=$(xcrun --sdk iphoneos --find clang) 
       make -j$(sysctl -n hw.logicalcpu)
+      make install
     popd
 }
 
@@ -193,6 +200,7 @@ build_ios_sim() {
       BUILD_DIR="$BUILD_DIR_LIB_NATIVE_STITCHER/ios-sim/$ARCH"
       INSTALL_DIR="$INSTALL_DIR_LIB_NATIVE_STITCHER/ios-sim/$ARCH"
       mkdir -p "$BUILD_DIR"
+      mkdir -p "$INSTALL_DIR"
       pushd "$BUILD_DIR"
         cmake $CWD \
           -G"Unix Makefiles" \
@@ -200,9 +208,11 @@ build_ios_sim() {
           -DCMAKE_SYSTEM_PROCESSOR=$ARCH \
           -DCMAKE_SYSTEM_NAME=iOS \
           -DCMAKE_OSX_SYSROOT=${IOS_SYSROOT[0]} \
+          -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" \
           -DCMAKE_C_FLAGS="-target $ARCH-apple-ios14.0-simulator" \
           -DCMAKE_C_COMPILER=$(xcrun --sdk iphonesimulator --find clang) 
         make -j$(sysctl -n hw.logicalcpu)
+        make install
       popd
     done
 }
@@ -229,7 +239,7 @@ Command: build.sh
 Usage:
   build.sh  --help        # Show this help information.
   build.sh  clean <platform>  # Clean build files for architecture.
-  build.sh  <platform>        # Build the lib native library.
+  build.sh  build <platform>        # Build the lib native library.
   "
   exit 1
 }
@@ -248,7 +258,7 @@ case "$1" in
         ios)
           build_ios
             ;;
-        andriod)
+        android)
             build_android
             ;;
         ios-sim)

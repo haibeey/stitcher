@@ -10,3 +10,4 @@ builds
 builds/*
 installs
 installs/*
+*stitch.dSYM*
