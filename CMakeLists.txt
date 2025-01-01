@@ -20,7 +20,6 @@ target_link_libraries(${PROJECT_NAME} PRIVATE ${LIBJPEG_LIBS})
 
 
 install(TARGETS ${PROJECT_NAME} LIBRARY DESTINATION lib)
-message(STATUS "${LIBJPEG_TURBO_INCLUDE_DIR} yoyo ${CMAKE_SOURCE_DIR}")
 install(DIRECTORY ${LIBJPEG_TURBO_INCLUDE_DIR}/ DESTINATION include) 
 install(FILES laplaceBlending.h utils.h edJpeg.h  DESTINATION include)
 

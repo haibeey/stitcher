@@ -1,3 +1,7 @@
+#ifndef DEBUG
+#define DEBUG 0
+#endif
+
 #include "turbojpeg.h"
 #include <stdlib.h>
 #include <pthread.h>
@@ -11,8 +15,6 @@
 #include "edJpeg.h"
 
 const int CHANNELS = 3;
-const int GAUSSIAN_SIZE = 5;
-const float GAUSSIAN_SIGMA = 1.0f;
 
 Image *create_image(const char *filename)
 {
@@ -237,7 +239,6 @@ Image downsample(Image *img)
 
     if (!downsampled)
     {
-        fprintf(stderr, "Memory allocation failed\n");
         exit(EXIT_FAILURE);
     }
 
@@ -702,8 +703,6 @@ void blend(Blender *b)
         }
     }
 
-    printf("Blend done\n");
-
     b->result = (Image *)malloc(sizeof(Image));
     b->result->data = (unsigned char *)malloc(image_size(blended_image) * sizeof(unsigned char));
     b->result->channels = blended_image->channels;
@@ -713,7 +712,10 @@ void blend(Blender *b)
 
     free(ubi.data);
 
-    clock_t end = clock();
-    double duration = (double)(end - start) / CLOCKS_PER_SEC;
-    printf("Elapsed time for blend: %.2f seconds\n", duration);
+    if (DEBUG)
+    {
+        clock_t end = clock();
+        double duration = (double)(end - start) / CLOCKS_PER_SEC;
+        printf("Elapsed time for blend: %.2f seconds\n", duration);
+    }
 }

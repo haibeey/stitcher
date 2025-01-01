@@ -1,4 +1,3 @@
-#define BANDS 5
 
 typedef struct
 {
