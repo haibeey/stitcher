@@ -12,9 +12,9 @@ Image *create_image_mask(int width, int height, float range, int left, int right
 int save_image(Image *img, char *out_filename);
 int image_size(Image *img);
 void destroy_image(Image *img);
-Image upsample(Image *img);
-Image downsample(Image *img);
-Image compute_laplacian(Image *original, Image *upsampled);
+Image *upsample(Image *img);
+Image *downsample(Image *img);
+Image *compute_laplacian(Image *original, Image *upsampled);
 void crop_image(Image *img, int cut_top, int cut_bottom, int cut_left, int cut_right);
 
 typedef struct
@@ -43,10 +43,12 @@ typedef struct
     Image **out;
     Image **out_mask;
     Image *result;
+    Image **img_laplacians;
+    Image **mask_gaussian;
 } Blender;
 
 Blender *create_blender(Rect out_size, int nb);
-void feed(Blender *b, Image *img, Image *maskImg, Point tl);
+int feed(Blender *b, Image *img, Image *maskImg, Point tl);
 void blend(Blender *b);
 void destroy_blender(Blender *blender);
 
@@ -83,8 +85,8 @@ typedef struct
     int level_width;
     int level_height;
     int level;
-    Image *img_laplacians;
-    Image *mask_gaussian;
+    Image **img_laplacians;
+    Image **mask_gaussian;
     Image **out;
     Image **out_mask;
 } FeedWorkerArgs;
