@@ -5,6 +5,7 @@
 #include "edJpeg.h"
 #include "utils.h"
 
+//naive testing  
 int main()
 {
 
