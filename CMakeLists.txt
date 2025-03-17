@@ -15,7 +15,7 @@ endif()
 include_directories(${LIBJPEG_TURBO_INCLUDE_DIR})
 link_directories(${LIBJPEG_TURBO_LIB_DIR})
 
-add_library(${PROJECT_NAME} SHARED laplaceBlending.c edJpeg.c utils.c)
+add_library(${PROJECT_NAME} SHARED laplace_blending.c jpeg.c utils.c)
 target_link_libraries(${PROJECT_NAME} PRIVATE ${LIBJPEG_LIBS})
 
 

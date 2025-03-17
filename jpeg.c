@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "utils.h"
-#include "edJpeg.h"
+#include "jpeg.h"
 
 int decompress_jpeg(const char *filename, unsigned char **imgBuf, int *width, int *height)
 {

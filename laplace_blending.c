@@ -11,8 +11,8 @@
 #include <string.h>
 
 #include "utils.h"
-#include "laplaceBlending.h"
-#include "edJpeg.h"
+#include "laplace_blending.h"
+#include "jpeg.h"
 
 const int CHANNELS = 3;
 
@@ -126,6 +126,8 @@ Blender *create_blender(Rect out_size, int nb)
 
     double max_len = (double)(out_size.width > out_size.height ? out_size.width : out_size.height);
     blender->num_bands = fmin(blender->num_bands, (int)ceil(log(max_len) / log(2.0)));
+
+    printf("%d\n",blender->num_bands);
 
     out_size.width += ((1 << blender->num_bands) - out_size.width % (1 << blender->num_bands)) % (1 << blender->num_bands);
     out_size.height += ((1 << blender->num_bands) - out_size.height % (1 << blender->num_bands)) % (1 << blender->num_bands);
@@ -318,15 +320,15 @@ Image *downsample(Image *img)
     return result;
 }
 
-void *upsample_worker(void *arg)
+void *upsample_worker(void *args)
 {
-    SamplingThreadData *args = (SamplingThreadData *)arg;
+    SamplingThreadData *s = (SamplingThreadData *)args;
 
-    for (int y = args->start_row; y < args->end_row; ++y)
+    for (int y = s->start_row; y < s->end_row; ++y)
     {
-        for (int x = 0; x < args->new_width; ++x)
+        for (int x = 0; x < s->new_width; ++x)
         {
-            for (int c = 0; c < args->img->channels; ++c)
+            for (int c = 0; c < s->img->channels; ++c)
             {
                 float srcX = x / 2.0f;
                 float srcY = y / 2.0f;
@@ -336,22 +338,22 @@ void *upsample_worker(void *arg)
                 float fx = srcX - x0;
                 float fy = srcY - y0;
 
-                if (x0 >= args->img->width - 1)
-                    x0 = args->img->width - 2;
-                if (y0 >= args->img->height - 1)
-                    y0 = args->img->height - 2;
+                if (x0 >= s->img->width - 1)
+                    x0 = s->img->width - 2;
+                if (y0 >= s->img->height - 1)
+                    y0 = s->img->height - 2;
 
-                unsigned char p00 = args->img->data[(y0 * args->img->width + x0) * args->img->channels + c];
-                unsigned char p01 = args->img->data[(y0 * args->img->width + (x0 + 1)) * args->img->channels + c];
-                unsigned char p10 = args->img->data[((y0 + 1) * args->img->width + x0) * args->img->channels + c];
-                unsigned char p11 = args->img->data[((y0 + 1) * args->img->width + (x0 + 1)) * args->img->channels + c];
+                unsigned char p00 = s->img->data[(y0 * s->img->width + x0) * s->img->channels + c];
+                unsigned char p01 = s->img->data[(y0 * s->img->width + (x0 + 1)) * s->img->channels + c];
+                unsigned char p10 = s->img->data[((y0 + 1) * s->img->width + x0) * s->img->channels + c];
+                unsigned char p11 = s->img->data[((y0 + 1) * s->img->width + (x0 + 1)) * s->img->channels + c];
 
                 unsigned char interpolated = (unsigned char)((1 - fx) * (1 - fy) * p00 +
                                                              fx * (1 - fy) * p01 +
                                                              (1 - fx) * fy * p10 +
                                                              fx * fy * p11);
 
-                args->sampled[(y * args->new_width + x) * args->img->channels + c] = interpolated;
+                s->sampled[(y * s->new_width + x) * s->img->channels + c] = interpolated;
             }
         }
     }
@@ -472,31 +474,31 @@ Image *compute_laplacian(Image *original, Image *upsampled)
 
 void *feed_worker(void *args)
 {
-    FeedWorkerArgs *wArgs = (FeedWorkerArgs *)args;
+    FeedWorkerArgs *f = (FeedWorkerArgs *)args;
 
-    for (int k = wArgs->start_row; k < wArgs->end_row; ++k)
+    for (int k = f->start_row; k < f->end_row; ++k)
     {
-        for (int i = 0; i < wArgs->cols; ++i)
+        for (int i = 0; i < f->cols; ++i)
         {
             for (int z = 0; z < CHANNELS; ++z)
             {
-                int imgIndex = ((i + (k * wArgs->level_width)) * CHANNELS) + z;
+                int imgIndex = ((i + (k * f->level_width)) * CHANNELS) + z;
                 int maskIndex = imgIndex / CHANNELS;
 
-                if (imgIndex < wArgs->img_laplacians[wArgs->level]->width * wArgs->img_laplacians[wArgs->level]->height * CHANNELS &&
-                    maskIndex < wArgs->mask_gaussian[wArgs->level]->width * wArgs->mask_gaussian[wArgs->level]->height)
+                if (imgIndex < f->img_laplacians[f->level]->width * f->img_laplacians[f->level]->height * CHANNELS &&
+                    maskIndex < f->mask_gaussian[f->level]->width * f->mask_gaussian[f->level]->height)
                 {
 
-                    int outLevelIndex = (((i + wArgs->x_tl) + ((k + wArgs->y_tl) * wArgs->out_level_width)) * CHANNELS) + z;
-                    int out_maskLevelIndex = ((i + wArgs->x_tl) + ((k + wArgs->y_tl) * wArgs->out_level_width));
+                    int outLevelIndex = (((i + f->x_tl) + ((k + f->y_tl) * f->out_level_width)) * CHANNELS) + z;
+                    int outMaskLevelIndex = ((i + f->x_tl) + ((k + f->y_tl) * f->out_level_width));
 
-                    int imgVal = wArgs->img_laplacians[wArgs->level]->data[imgIndex];
-                    int maskVal = wArgs->mask_gaussian[wArgs->level]->data[maskIndex] / 255;
+                    int imgVal = f->img_laplacians[f->level]->data[imgIndex];
+                    int maskVal = f->mask_gaussian[f->level]->data[maskIndex]  / 255;
 
-                    if (outLevelIndex < wArgs->out_level_height * wArgs->out_level_width * CHANNELS)
+                    if (outLevelIndex < f->out_level_height * f->out_level_width * CHANNELS)
                     {
-                        wArgs->out[wArgs->level]->data[outLevelIndex] += (imgVal * maskVal);
-                        wArgs->out_mask[wArgs->level]->data[out_maskLevelIndex] += wArgs->mask_gaussian[wArgs->level]->data[maskIndex];
+                        f->out[f->level]->data[outLevelIndex] += (imgVal * maskVal);
+                        f->out_mask[f->level]->data[outMaskLevelIndex] += f->mask_gaussian[f->level]->data[maskIndex];
                     }
                 }
             }
@@ -547,7 +549,6 @@ int feed(Blender *b, Image *img, Image *mask_img, Point tl)
 
     add_border_to_image(&img->data, &img->width, &img->height, top, bottom, left, right, CHANNELS, BORDER_REFLECT);
     add_border_to_image(&mask_img->data, &mask_img->width, &mask_img->height, top, bottom, left, right, 1, BORDER_CONSTANT);
-
 
 
     Image *current_img = img;
@@ -645,23 +646,23 @@ clean:
 
 void *normalize_worker(void *args)
 {
-    NormalizeWorkerArgs *wArgs = (NormalizeWorkerArgs *)args;
-    for (int y = wArgs->start_row; y < wArgs->end_row; ++y)
+    NormalizeWorkerArgs *n = (NormalizeWorkerArgs *)args;
+    for (int y = n->start_row; y < n->end_row; ++y)
     {
-        for (int x = 0; x < wArgs->output_width; ++x)
+        for (int x = 0; x < n->output_width; ++x)
         {
-            int maskIndex = x + (y * wArgs->output_width);
-            if (maskIndex < image_size(wArgs->out_mask[wArgs->level]))
+            int maskIndex = x + (y * n->output_width);
+            if (maskIndex < image_size(n->out_mask[n->level]))
             {
-                int w = wArgs->out_mask[wArgs->level]->data[maskIndex] + 1;
+                int w = n->out_mask[n->level]->data[maskIndex] + 1;
 
                 for (int z = 0; z < CHANNELS; z++)
                 {
-                    int imgIndex = (x + (y * wArgs->output_width)) * CHANNELS + z;
-                    if (imgIndex < image_size(wArgs->out[wArgs->level]))
+                    int imgIndex = (x + (y * n->output_width)) * CHANNELS + z;
+                    if (imgIndex < image_size(n->out[n->level]))
                     {
-                        wArgs->out[wArgs->level]->data[imgIndex] =
-                            (unsigned char)(((int)wArgs->out[wArgs->level]->data[imgIndex] * 256) / w);
+                        n->out[n->level]->data[imgIndex] =
+                            (unsigned char)(((int)n->out[n->level]->data[imgIndex] * 256) / w);
                     }
                 }
             }
@@ -672,13 +673,13 @@ void *normalize_worker(void *args)
 
 void *blend_worker(void *args)
 {
-    BlendWorkerArgs *wArgs = (BlendWorkerArgs *)args;
-    for (int i = wArgs->start_index; i < wArgs->end_index; ++i)
+    BlendWorkerArgs *b = (BlendWorkerArgs *)args;
+    for (int i = b->start_index; i < b->end_index; ++i)
     {
-        if (i < wArgs->out_size)
+        if (i < b->out_size)
         {
-            wArgs->blended_image->data[i] = clamp(
-                wArgs->blended_image->data[i] + wArgs->out_level->data[i], 0, 255);
+            b->blended_image->data[i] = clamp(
+                b->blended_image->data[i] + b->out_level->data[i], 0, 255);
         }
     }
     return NULL;
@@ -719,9 +720,18 @@ void blend(Blender *b)
     Image *blended_image = b->out[b->num_bands];
     Image *ubi;
 
+    char buffer[100];
+
     for (int level = b->num_bands; level > 0; --level)
     {
+     
         ubi = upsample(blended_image);
+        // sprintf(buffer, "image%d.jpg", level);
+        // if (save_image(ubi, buffer))
+        // {
+        //     printf(" Image  saved \n");
+        // }
+
         blended_image = ubi;
 
         int out_size = image_size(b->out[level - 1]);

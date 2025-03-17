@@ -30,7 +30,7 @@ If you have `libturbojpeg` installed, compile and run the test with the followin
 gcc-14 -pthread -fsanitize=address -g -o stitch \
 -I../ -I/usr/local/include \
 -L/usr/local/lib -lturbojpeg \
-stitch.c ../laplaceBlending.c ../edJpeg.c ../utils.c && time ./stitch
+stitch.c ../laplace_blending.c ../jpeg.c ../utils.c && time ./stitch
 ```
 
 ### 2. Testing with Custom-Built NativeSticher Library  

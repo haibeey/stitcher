@@ -1,8 +1,8 @@
 
 
 #include <stdio.h>
-#include "laplaceBlending.h"
-#include "edJpeg.h"
+#include "laplace_blending.h"
+#include "jpeg.h"
 #include "utils.h"
 
 //naive testing  
