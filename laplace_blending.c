@@ -38,14 +38,12 @@ Image *create_empty_image(int width, int height, int channels)
     if (!img)
         return NULL;
 
-    img->data = (unsigned char *)malloc(width * height * channels);
+    img->data = (unsigned char *)calloc(width * height * channels,sizeof(unsigned char));
     if (!img->data)
     {
         free(img);
         return NULL;
     }
-
-    memset(img->data, 0, width * height * channels * sizeof(unsigned char));
     img->channels = channels;
     img->width = width;
     img->height = height;
@@ -126,8 +124,6 @@ Blender *create_blender(Rect out_size, int nb)
 
     double max_len = (double)(out_size.width > out_size.height ? out_size.width : out_size.height);
     blender->num_bands = fmin(blender->num_bands, (int)ceil(log(max_len) / log(2.0)));
-
-    printf("%d\n",blender->num_bands);
 
     out_size.width += ((1 << blender->num_bands) - out_size.width % (1 << blender->num_bands)) % (1 << blender->num_bands);
     out_size.height += ((1 << blender->num_bands) - out_size.height % (1 << blender->num_bands)) % (1 << blender->num_bands);
@@ -234,7 +230,7 @@ void *down_sample_operation(void *arg)
                 sum += data->img->data[((2 * y + 1) * data->img->width + 2 * x) * data->img->channels + c];
                 sum += data->img->data[((2 * y + 1) * data->img->width + 2 * x + 1) * data->img->channels + c];
 
-                data->sampled[(y * data->new_width + x) * data->img->channels + c] = sum / 4;
+                data->sampled[(y * data->new_width + x) * data->img->channels + c] = sum >> 4;
             }
         }
     }
@@ -493,12 +489,23 @@ void *feed_worker(void *args)
                     int outMaskLevelIndex = ((i + f->x_tl) + ((k + f->y_tl) * f->out_level_width));
 
                     int imgVal = f->img_laplacians[f->level]->data[imgIndex];
-                    int maskVal = f->mask_gaussian[f->level]->data[maskIndex]  / 255;
+                    int maskVal = (f->mask_gaussian[f->level]->data[maskIndex] + 1)  >> 8;
 
                     if (outLevelIndex < f->out_level_height * f->out_level_width * CHANNELS)
                     {
-                        f->out[f->level]->data[outLevelIndex] += (imgVal * maskVal);
-                        f->out_mask[f->level]->data[outMaskLevelIndex] += f->mask_gaussian[f->level]->data[maskIndex];
+                        if (maskVal >= 1){
+                            
+                            if (z == 0)
+                            {
+                                f->out_mask[f->level]->data[outMaskLevelIndex] += maskVal;
+                            }
+                            
+                            int oldVal = f->out[f->level]->data[outLevelIndex];
+                            int avg = oldVal + ((imgVal - oldVal) / f->out_mask[f->level]->data[outMaskLevelIndex]);
+
+                            f->out[f->level]->data[outLevelIndex] = avg;
+
+                        }
                     }
                 }
             }
@@ -515,12 +522,12 @@ int feed(Blender *b, Image *img, Image *mask_img, Point tl)
     int gap = 3 * (1 << b->num_bands);
     Point tl_new, br_new;
 
-    tl_new.x = (b->output_size.x > (tl.x - gap)) ? b->output_size.x : (tl.x - gap);
-    tl_new.y = (b->output_size.y > (tl.y - gap)) ? b->output_size.y : (tl.y - gap);
+    tl_new.x = max(b->output_size.x , tl.x- gap);
+    tl_new.y = max(b->output_size.y, tl.y - gap);
 
     Point br_point = br(b->output_size);
-    br_new.x = (br_point.x < (tl.x + img->width + gap)) ? br_point.x : (tl.x + img->width + gap);
-    br_new.y = (br_point.y < (tl.y + img->height + gap)) ? br_point.y : (tl.y + img->height + gap);
+    br_new.x = min(br_point.x,tl.x + img->width + gap);
+    br_new.y = min(br_point.y,tl.y + img->height + gap);
 
     tl_new.x = b->output_size.x + (((tl_new.x - b->output_size.x) >> b->num_bands) << b->num_bands);
     tl_new.y = b->output_size.y + (((tl_new.y - b->output_size.y) >> b->num_bands) << b->num_bands);
@@ -534,8 +541,8 @@ int feed(Blender *b, Image *img, Image *mask_img, Point tl)
     br_new.x = tl_new.x + width;
     br_new.y = tl_new.y + height;
 
-    int dx = (br_new.x - br_point.x > 0) ? (br_new.x - br_point.x) : 0;
-    int dy = (br_new.y - br_point.y > 0) ? (br_new.y - br_point.y) : 0;
+    int dx = max(br_new.x - br_point.x,0);
+    int dy = max(br_new.y - br_point.y,0);
 
     tl_new.x -= dx;
     br_new.x -= dx;
@@ -570,7 +577,7 @@ int feed(Blender *b, Image *img, Image *mask_img, Point tl)
         }
 
         b->img_laplacians[j] = compute_laplacian(current_img, up);
-        free(up);
+        destroy_image(up);
 
         current_img = down;
     }
@@ -644,33 +651,6 @@ clean:
     return return_val;
 }
 
-void *normalize_worker(void *args)
-{
-    NormalizeWorkerArgs *n = (NormalizeWorkerArgs *)args;
-    for (int y = n->start_row; y < n->end_row; ++y)
-    {
-        for (int x = 0; x < n->output_width; ++x)
-        {
-            int maskIndex = x + (y * n->output_width);
-            if (maskIndex < image_size(n->out_mask[n->level]))
-            {
-                int w = n->out_mask[n->level]->data[maskIndex] + 1;
-
-                for (int z = 0; z < CHANNELS; z++)
-                {
-                    int imgIndex = (x + (y * n->output_width)) * CHANNELS + z;
-                    if (imgIndex < image_size(n->out[n->level]))
-                    {
-                        n->out[n->level]->data[imgIndex] =
-                            (unsigned char)(((int)n->out[n->level]->data[imgIndex] * 256) / w);
-                    }
-                }
-            }
-        }
-    }
-    return NULL;
-}
-
 void *blend_worker(void *args)
 {
     BlendWorkerArgs *b = (BlendWorkerArgs *)args;
@@ -691,47 +671,13 @@ void blend(Blender *b)
 
     int num_threads = get_cpus_count();
 
-    for (int level = 0; level < b->num_bands; ++level)
-    {
-        pthread_t threads[num_threads];
-        NormalizeWorkerArgs threadArgs[num_threads];
-
-        int rowsPerThread = b->output_size.height / num_threads;
-        int remainingRows = b->output_size.height % num_threads;
-
-        for (int i = 0; i < num_threads; ++i)
-        {
-            threadArgs[i].start_row = i * rowsPerThread;
-            threadArgs[i].end_row = threadArgs[i].start_row + rowsPerThread + (i == num_threads - 1 ? remainingRows : 0);
-            threadArgs[i].output_width = b->output_size.width;
-            threadArgs[i].level = level;
-            threadArgs[i].out = b->out;
-            threadArgs[i].out_mask = b->out_mask;
-
-            pthread_create(&threads[i], NULL, normalize_worker, &threadArgs[i]);
-        }
-
-        for (int i = 0; i < num_threads; ++i)
-        {
-            pthread_join(threads[i], NULL);
-        }
-    }
-
     Image *blended_image = b->out[b->num_bands];
     Image *ubi;
-
-    char buffer[100];
 
     for (int level = b->num_bands; level > 0; --level)
     {
      
         ubi = upsample(blended_image);
-        // sprintf(buffer, "image%d.jpg", level);
-        // if (save_image(ubi, buffer))
-        // {
-        //     printf(" Image  saved \n");
-        // }
-
         blended_image = ubi;
 
         int out_size = image_size(b->out[level - 1]);
