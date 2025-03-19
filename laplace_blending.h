@@ -1,20 +1,12 @@
+#include "jpeg.h"
 
-typedef struct
-{
-    unsigned char *data;
-    int width;
-    int height;
-    int channels;
-} Image;
-
-Image *create_image(const char *filename);
-Image *create_image_mask(int width, int height, float range, int left, int right);
-int save_image(Image *img, char *out_filename);
+Image create_image(const char *filename);
+Image create_image_mask(int width, int height, float range, int left, int right);
+int save_image(const Image *img, char *out_filename);
 int image_size(Image *img);
 void destroy_image(Image *img);
-Image *upsample(Image *img);
-Image *downsample(Image *img);
-Image *compute_laplacian(Image *original, Image *upsampled);
+Image upsample(const Image *img);
+Image downsample(const Image *img);
 void crop_image(Image *img, int cut_top, int cut_bottom, int cut_left, int cut_right);
 
 typedef struct
@@ -40,11 +32,11 @@ typedef struct
     Rect output_size;
     int *out_width_levels;
     int *out_height_levels;
-    Image **out;
-    Image **out_mask;
-    Image *result;
-    Image **img_laplacians;
-    Image **mask_gaussian;
+    Image *out;
+    Image *out_mask;
+    Image result;
+    Image *img_laplacians;
+    Image *mask_gaussian;
 } Blender;
 
 Blender *create_blender(Rect out_size, int nb);
@@ -58,7 +50,7 @@ typedef struct
     int end_row;
     int new_width;
     int new_height;
-    Image *img;
+    const Image *img;
     unsigned char *sampled;
 } SamplingThreadData;
 
@@ -85,10 +77,10 @@ typedef struct
     int level_width;
     int level_height;
     int level;
-    Image **img_laplacians;
-    Image **mask_gaussian;
-    Image **out;
-    Image **out_mask;
+    Image *img_laplacians;
+    Image *mask_gaussian;
+    Image *out;
+    Image *out_mask;
 } FeedWorkerArgs;
 
 typedef struct
@@ -106,6 +98,6 @@ typedef struct
     int start_index;
     int end_index;
     int out_size;
-    Image *blended_image;
-    Image *out_level;
+    Image blended_image;
+    Image out_level;
 } BlendWorkerArgs;

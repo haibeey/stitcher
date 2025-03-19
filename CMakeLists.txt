@@ -21,5 +21,5 @@ target_link_libraries(${PROJECT_NAME} PRIVATE ${LIBJPEG_LIBS})
 
 install(TARGETS ${PROJECT_NAME} LIBRARY DESTINATION lib)
 install(DIRECTORY ${LIBJPEG_TURBO_INCLUDE_DIR}/ DESTINATION include) 
-install(FILES laplaceBlending.h utils.h edJpeg.h  DESTINATION include)
+install(FILES laplace_blending.h utils.h jpeg.h  DESTINATION include)
 
