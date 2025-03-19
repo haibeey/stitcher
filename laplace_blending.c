@@ -523,11 +523,11 @@ int feed(Blender *b, Image *img, Image *mask_img, Point tl)
     }
 
     b->img_laplacians[b->num_bands] = images[b->num_bands];
-
+    Image sampled;
     for (int j = 0; j < b->num_bands; ++j)
     {
         b->mask_gaussian[j] = *mask_img;
-        Image sampled = downsample(mask_img);
+        sampled = downsample(mask_img);
         if (!sampled.data)
         {
             return_val = 0;

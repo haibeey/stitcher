@@ -1,3 +1,5 @@
+#!/bin/bash
+set -e 
 BUILD_DIR_LIB_TURBOJPEG=$PWD/builds/libturbojpeg
 INSTALL_DIR_LIB_TURBOJPEG=$PWD/installs/libturbojpeg
 BUILD_DIR_LIB_NATIVE_STITCHER=$PWD/builds/native-stitcher
