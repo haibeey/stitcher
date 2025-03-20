@@ -1,5 +1,5 @@
 # NativeSticher
-**NativeSticher** is a high-performance C library for multiband image merging using the Laplacian blending technique.  
+**NativeSticher** is a C library for multiband image merging using the Laplacian blending technique.  
 It enables seamless blending of overlapping images, useful for applications such as panorama generation, image stitching, and exposure fusion. Only supports JPEGS for now.
 
 ---
