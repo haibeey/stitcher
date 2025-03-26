@@ -176,10 +176,13 @@ void destroy_blender(Blender *blender)
     free(blender);
 }
 
-void *down_sample_operation(void *arg)
+void *down_sample_operation(void *args)
 {
-    SamplingThreadData *data = (SamplingThreadData *)arg;
-    for (int y = data->start_row; y < data->end_row; ++y)
+    ThreadArgs *arg = (ThreadArgs *)args;
+    int start_row = arg->start_index;
+    int end_row = arg->end_index;
+    SamplingThreadData *data = (SamplingThreadData *)arg->workerThreadArgs->std;
+    for (int y = start_row; y < end_row; ++y)
     {
         for (int x = 0; x < data->new_width; ++x)
         {
@@ -198,10 +201,13 @@ void *down_sample_operation(void *arg)
     return NULL;
 }
 
-void *maskdown_sample_operation(void *arg)
+void *maskdown_sample_operation(void *args)
 {
-    SamplingThreadData *data = (SamplingThreadData *)arg;
-    for (int y = data->start_row; y < data->end_row; ++y)
+    ThreadArgs *arg = (ThreadArgs *)args;
+    int start_row = arg->start_index;
+    int end_row = arg->end_index;
+    SamplingThreadData *data = (SamplingThreadData *)arg->workerThreadArgs->std;
+    for (int y = start_row; y < end_row; ++y)
     {
         for (int x = 0; x < data->new_width; ++x)
         {
@@ -222,46 +228,12 @@ Image downsample(const Image *img)
         return result;
     }
 
-    int num_threads = get_cpus_count();
+    SamplingThreadData std = {new_width, new_height, img, downsampled};
+    WorkerThreadArgs wtd;
+    wtd.std = &std;
+    ParallelOperatorArgs args = {new_height, &wtd};
 
-    int rowsPerThread = new_height / num_threads;
-    int remainingRows = new_height % num_threads;
-
-    pthread_t threads[num_threads];
-    SamplingThreadData thread_data[num_threads];
-
-    int start_row = 0;
-    for (unsigned int i = 0; i < num_threads; ++i)
-    {
-        int end_row = start_row + rowsPerThread + (remainingRows > 0 ? 1 : 0);
-        if (remainingRows > 0)
-        {
-            --remainingRows;
-        }
-
-        thread_data[i].start_row = start_row;
-        thread_data[i].end_row = end_row;
-        thread_data[i].new_width = new_width;
-        thread_data[i].new_height = new_height;
-        thread_data[i].img = img;
-        thread_data[i].sampled = downsampled;
-
-        if (img->channels == 3)
-        {
-            pthread_create(&threads[i], NULL, down_sample_operation, &thread_data[i]);
-        }
-        else
-        {
-            pthread_create(&threads[i], NULL, maskdown_sample_operation, &thread_data[i]);
-        }
-
-        start_row = end_row;
-    }
-
-    for (unsigned int i = 0; i < num_threads; ++i)
-    {
-        pthread_join(threads[i], NULL);
-    }
+    parallel_operator(DOWNSAMPLE, &args);
 
     result.channels = img->channels;
     result.data = downsampled;
@@ -272,9 +244,12 @@ Image downsample(const Image *img)
 
 void *upsample_worker(void *args)
 {
-    SamplingThreadData *s = (SamplingThreadData *)args;
+    ThreadArgs *arg = (ThreadArgs *)args;
+    int start_row = arg->start_index;
+    int end_row = arg->end_index;
+    SamplingThreadData *s = (SamplingThreadData *)arg->workerThreadArgs->std;
 
-    for (int y = s->start_row; y < s->end_row; ++y)
+    for (int y = start_row; y < end_row; ++y)
     {
         for (int x = 0; x < s->new_width; ++x)
         {
@@ -321,31 +296,12 @@ Image upsample(const Image *img)
     {
         return result;
     }
+    SamplingThreadData std = {new_width, new_height, img, upsampled};
+    WorkerThreadArgs wtd;
+    wtd.std = &std;
+    ParallelOperatorArgs args = {new_height, &wtd};
 
-    int num_threads = get_cpus_count();
-
-    pthread_t threads[num_threads];
-    SamplingThreadData thread_data[num_threads];
-
-    int rowsPerThread = new_height / num_threads;
-    int remainingRows = new_height % num_threads;
-
-    for (int i = 0; i < num_threads; ++i)
-    {
-        thread_data[i].img = img;
-        thread_data[i].sampled = upsampled;
-        thread_data[i].new_width = new_width;
-        thread_data[i].new_height = new_height;
-        thread_data[i].start_row = i * rowsPerThread;
-        thread_data[i].end_row = thread_data[i].start_row + rowsPerThread + (i == num_threads - 1 ? remainingRows : 0);
-
-        pthread_create(&threads[i], NULL, upsample_worker, &thread_data[i]);
-    }
-
-    for (int i = 0; i < num_threads; ++i)
-    {
-        pthread_join(threads[i], NULL);
-    }
+    parallel_operator(UPSAMPLE, &args);
 
     result.data = upsampled;
     result.width = new_width;
@@ -355,13 +311,16 @@ Image upsample(const Image *img)
     return result;
 }
 
-void *compute_laplacian_worker(void *arg)
+void *compute_laplacian_worker(void *args)
 {
-    LaplacianWorkerArgs *args = (LaplacianWorkerArgs *)arg;
+    ThreadArgs *arg = (ThreadArgs *)args;
+    int start_row = arg->start_index;
+    int end_row = arg->end_index;
+    LaplacianThreadData *data = (LaplacianThreadData *)arg->workerThreadArgs->ltd;
 
-    for (int i = args->start_index; i < args->end_index; ++i)
+    for (int i = start_row; i < end_row; ++i)
     {
-        args->laplacian_data[i] = (unsigned char)clamp(args->original_data[i] - args->upsampled_data[i], 1, 256) - 1;
+        data->laplacian_data[i] = (unsigned char)clamp(data->original_data[i] - data->upsampled_data[i], 1, 256) - 1;
     }
 
     return NULL;
@@ -377,30 +336,12 @@ Image compute_laplacian(Image *original, Image *upsampled)
         return result;
     }
 
-    int num_threads = get_cpus_count();
+    LaplacianThreadData ltd = {original->data, upsampled->data, laplacian, total_size};
+    WorkerThreadArgs wtd;
+    wtd.ltd = &ltd;
+    ParallelOperatorArgs args = {total_size, &wtd};
 
-    pthread_t threads[num_threads];
-    LaplacianWorkerArgs thread_data[num_threads];
-
-    int elementsPerThread = total_size / num_threads;
-    int remainingElements = total_size % num_threads;
-
-    for (int i = 0; i < num_threads; ++i)
-    {
-        thread_data[i].original_data = original->data;
-        thread_data[i].upsampled_data = upsampled->data;
-        thread_data[i].laplacian_data = laplacian;
-        thread_data[i].total_size = total_size;
-        thread_data[i].start_index = i * elementsPerThread;
-        thread_data[i].end_index = thread_data[i].start_index + elementsPerThread + (i == num_threads - 1 ? remainingElements : 0);
-
-        pthread_create(&threads[i], NULL, compute_laplacian_worker, &thread_data[i]);
-    }
-
-    for (int i = 0; i < num_threads; ++i)
-    {
-        pthread_join(threads[i], NULL);
-    }
+    parallel_operator(LAPLACIAN, &args);
 
     result.data = laplacian;
     result.width = original->width;
@@ -412,9 +353,12 @@ Image compute_laplacian(Image *original, Image *upsampled)
 
 void *feed_worker(void *args)
 {
-    FeedWorkerArgs *f = (FeedWorkerArgs *)args;
+    ThreadArgs *arg = (ThreadArgs *)args;
+    int start_row = arg->start_index;
+    int end_row = arg->end_index;
+    FeedThreadData *f = (FeedThreadData *)arg->workerThreadArgs->ftd;
 
-    for (int k = f->start_row; k < f->end_row; ++k)
+    for (int k = start_row; k < end_row; ++k)
     {
         for (int i = 0; i < f->cols; ++i)
         {
@@ -511,6 +455,13 @@ int feed(Blender *b, Image *img, Image *mask_img, Point tl)
             goto clean;
         }
 
+        // char buf[100];
+        // sprintf(buf,"image%d.jpg",j);
+        // if (save_image(&images[j + 1], buf))
+        // {
+        //     printf("Merged image  saved \n");
+        // }
+
         Image up = upsample(&images[j + 1]);
         if (!up.data)
         {
@@ -546,39 +497,28 @@ int feed(Blender *b, Image *img, Image *mask_img, Point tl)
     for (int level = 0; level <= b->num_bands; ++level)
     {
 
-        pthread_t threads[num_threads];
-        FeedWorkerArgs thread_data[num_threads];
-
         int rows = (y_br - y_tl);
         int cols = (x_br - x_tl);
 
-        int rowsPerThread = rows / num_threads;
-        int remainingRows = rows % num_threads;
+        FeedThreadData ftd;
+        ftd.rows = rows;
+        ftd.cols = cols;
+        ftd.x_tl = x_tl;
+        ftd.y_tl = y_tl;
+        ftd.out_level_width = b->out_width_levels[level];
+        ftd.out_level_height = b->out_height_levels[level];
+        ftd.level_width = b->img_laplacians[level].width;
+        ftd.level_height = b->img_laplacians[level].height;
+        ftd.level = level;
+        ftd.img_laplacians = b->img_laplacians;
+        ftd.mask_gaussian = b->mask_gaussian;
+        ftd.out = b->out;
+        ftd.out_mask = b->out_mask;
+        WorkerThreadArgs wtd;
+        wtd.ftd = &ftd;
+        ParallelOperatorArgs args = {rows, &wtd};
 
-        for (int i = 0; i < num_threads; ++i)
-        {
-            thread_data[i].start_row = i * rowsPerThread;
-            thread_data[i].end_row = (i * rowsPerThread) + rowsPerThread + (i == num_threads - 1 ? remainingRows : 0);
-            thread_data[i].rows = rows;
-            thread_data[i].cols = cols;
-            thread_data[i].x_tl = x_tl;
-            thread_data[i].y_tl = y_tl;
-            thread_data[i].out_level_width = b->out_width_levels[level];
-            thread_data[i].out_level_height = b->out_height_levels[level];
-            thread_data[i].level_width = b->img_laplacians[level].width;
-            thread_data[i].level_height = b->img_laplacians[level].height;
-            thread_data[i].level = level;
-            thread_data[i].img_laplacians = b->img_laplacians;
-            thread_data[i].mask_gaussian = b->mask_gaussian;
-            thread_data[i].out = b->out;
-            thread_data[i].out_mask = b->out_mask;
-            pthread_create(&threads[i], NULL, feed_worker, &thread_data[i]);
-        }
-
-        for (int i = 0; i < num_threads; ++i)
-        {
-            pthread_join(threads[i], NULL);
-        }
+        parallel_operator(FEED, &args);
 
         x_tl /= 2;
         y_tl /= 2;
@@ -591,8 +531,11 @@ clean:
 
 void *blend_worker(void *args)
 {
-    BlendWorkerArgs *b = (BlendWorkerArgs *)args;
-    for (int i = b->start_index; i < b->end_index; ++i)
+    ThreadArgs *arg = (ThreadArgs *)args;
+    int start_row = arg->start_index;
+    int end_row = arg->end_index;
+    BlendThreadData *b = (BlendThreadData *)arg->workerThreadArgs->btd;
+    for (int i = start_row; i < end_row; ++i)
     {
         if (i < b->out_size)
         {
@@ -607,39 +550,20 @@ void blend(Blender *b)
 {
     clock_t start = clock();
 
-    int num_threads = get_cpus_count();
-
     Image blended_image = b->out[b->num_bands];
     Image ubi;
 
     for (int level = b->num_bands; level > 0; --level)
     {
-
         ubi = upsample(&blended_image);
         blended_image = ubi;
-
         int out_size = image_size(&b->out[level - 1]);
-        pthread_t threads[num_threads];
-        BlendWorkerArgs threadArgs[num_threads];
 
-        int elementsPerThread = out_size / num_threads;
-        int remainingElements = out_size % num_threads;
-
-        for (int i = 0; i < num_threads; ++i)
-        {
-            threadArgs[i].start_index = i * elementsPerThread;
-            threadArgs[i].end_index = threadArgs[i].start_index + elementsPerThread + (i == num_threads - 1 ? remainingElements : 0);
-            threadArgs[i].out_size = out_size;
-            threadArgs[i].blended_image = blended_image;
-            threadArgs[i].out_level = b->out[level - 1];
-
-            pthread_create(&threads[i], NULL, blend_worker, &threadArgs[i]);
-        }
-
-        for (int i = 0; i < num_threads; ++i)
-        {
-            pthread_join(threads[i], NULL);
-        }
+        BlendThreadData btd = {out_size, blended_image, b->out[level - 1]};
+        WorkerThreadArgs wtd;
+        wtd.btd = &btd;
+        ParallelOperatorArgs args = {out_size, &wtd};
+        parallel_operator(BLEND, &args);
     }
 
     b->result.data = (unsigned char *)malloc(image_size(&blended_image));
@@ -655,5 +579,78 @@ void blend(Blender *b)
         clock_t end = clock();
         double duration = (double)(end - start) / CLOCKS_PER_SEC;
         printf("Elapsed time for blend: %.2f seconds\n", duration);
+    }
+}
+
+
+void parallel_operator(OperatorType operatorType, ParallelOperatorArgs *arg)
+{
+    int num_threads = get_cpus_count();
+
+    int rowsPerThread = arg->rows / num_threads;
+    int remainingRows = arg->rows % num_threads;
+
+    pthread_t threads[num_threads];
+    ThreadArgs thread_data[num_threads];
+
+    int start_row = 0;
+    for (unsigned int i = 0; i < num_threads; ++i)
+    {
+        int end_row = start_row + rowsPerThread + (remainingRows > 0 ? 1 : 0);
+        if (remainingRows > 0)
+        {
+            --remainingRows;
+        }
+
+        switch (operatorType)
+        {
+        case UPSAMPLE:
+        case DOWNSAMPLE:
+            thread_data[i].end_index = end_row;
+            thread_data[i].start_index = start_row;
+            thread_data[i].workerThreadArgs = arg->workerThreadArgs;
+            if (operatorType == DOWNSAMPLE)
+            {
+                if (arg->workerThreadArgs->std->img->channels == 3)
+                {
+                    pthread_create(&threads[i], NULL, down_sample_operation, &thread_data[i]);
+                }
+                else
+                {
+                    pthread_create(&threads[i], NULL, maskdown_sample_operation, &thread_data[i]);
+                }
+            }
+            else
+            {
+                pthread_create(&threads[i], NULL, upsample_worker, &thread_data[i]);
+            }
+
+            break;
+        case FEED:
+            thread_data[i].end_index = end_row;
+            thread_data[i].start_index = start_row;
+            thread_data[i].workerThreadArgs = arg->workerThreadArgs;
+            pthread_create(&threads[i], NULL, feed_worker, &thread_data[i]);
+            break;
+        case LAPLACIAN:
+            thread_data[i].end_index = end_row;
+            thread_data[i].start_index = start_row;
+            thread_data[i].workerThreadArgs = arg->workerThreadArgs;
+            pthread_create(&threads[i], NULL, compute_laplacian_worker, &thread_data[i]);
+            break;
+        case BLEND:
+            thread_data[i].end_index = end_row;
+            thread_data[i].start_index = start_row;
+            thread_data[i].workerThreadArgs = arg->workerThreadArgs;
+            pthread_create(&threads[i], NULL, blend_worker, &thread_data[i]);
+            break;
+        }
+
+        start_row = end_row;
+    }
+
+    for (unsigned int i = 0; i < num_threads; ++i)
+    {
+        pthread_join(threads[i], NULL);
     }
 }

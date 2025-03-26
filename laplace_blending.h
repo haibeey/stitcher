@@ -1,13 +1,13 @@
 #include "jpeg.h"
 
-Image create_image(const char *filename);
-Image create_image_mask(int width, int height, float range, int left, int right);
-int save_image(const Image *img, char *out_filename);
-int image_size(Image *img);
-void destroy_image(Image *img);
-Image upsample(const Image *img);
-Image downsample(const Image *img);
-void crop_image(Image *img, int cut_top, int cut_bottom, int cut_left, int cut_right);
+typedef enum
+{
+    DOWNSAMPLE,
+    UPSAMPLE,
+    LAPLACIAN,
+    FEED,
+    BLEND
+} OperatorType;
 
 typedef struct
 {
@@ -44,10 +44,10 @@ int feed(Blender *b, Image *img, Image *maskImg, Point tl);
 void blend(Blender *b);
 void destroy_blender(Blender *blender);
 
+
+
 typedef struct
 {
-    int start_row;
-    int end_row;
     int new_width;
     int new_height;
     const Image *img;
@@ -60,14 +60,10 @@ typedef struct
     unsigned char *upsampled_data;
     unsigned char *laplacian_data;
     int total_size;
-    int start_index;
-    int end_index;
-} LaplacianWorkerArgs;
+} LaplacianThreadData;
 
 typedef struct
 {
-    int start_row;
-    int end_row;
     int rows;
     int cols;
     int x_tl;
@@ -81,23 +77,43 @@ typedef struct
     Image *mask_gaussian;
     Image *out;
     Image *out_mask;
-} FeedWorkerArgs;
+} FeedThreadData;
 
 typedef struct
 {
-    int start_row;
-    int end_row;
-    int output_width;
-    int level;
-    Image **out;
-    Image **out_mask;
-} NormalizeWorkerArgs;
+    int out_size;
+    Image blended_image;
+    Image out_level;
+} BlendThreadData;
+
+typedef union 
+{
+    SamplingThreadData *std;
+    LaplacianThreadData *ltd;
+    FeedThreadData *ftd;
+    BlendThreadData *btd;
+} WorkerThreadArgs;
+
+typedef struct
+{
+    int rows;
+    WorkerThreadArgs *workerThreadArgs;
+} ParallelOperatorArgs;
 
 typedef struct
 {
     int start_index;
     int end_index;
-    int out_size;
-    Image blended_image;
-    Image out_level;
-} BlendWorkerArgs;
+    WorkerThreadArgs *workerThreadArgs;
+} ThreadArgs;
+
+
+Image create_image(const char *filename);
+Image create_image_mask(int width, int height, float range, int left, int right);
+int save_image(const Image *img, char *out_filename);
+int image_size(Image *img);
+void destroy_image(Image *img);
+Image upsample(const Image *img);
+Image downsample(const Image *img);
+void crop_image(Image *img, int cut_top, int cut_bottom, int cut_left, int cut_right);
+void parallel_operator(OperatorType operatorType, ParallelOperatorArgs *arg);
