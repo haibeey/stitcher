@@ -44,8 +44,6 @@ int feed(Blender *b, Image *img, Image *maskImg, Point tl);
 void blend(Blender *b);
 void destroy_blender(Blender *blender);
 
-
-
 typedef struct
 {
     int new_width;
@@ -86,7 +84,7 @@ typedef struct
     Image out_level;
 } BlendThreadData;
 
-typedef union 
+typedef union
 {
     SamplingThreadData *std;
     LaplacianThreadData *ltd;
@@ -106,7 +104,6 @@ typedef struct
     int end_index;
     WorkerThreadArgs *workerThreadArgs;
 } ThreadArgs;
-
 
 Image create_image(const char *filename);
 Image create_image_mask(int width, int height, float range, int left, int right);

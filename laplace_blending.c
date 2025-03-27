@@ -13,6 +13,13 @@
 #include "utils.h"
 #include "laplace_blending.h"
 
+const float GAUSSIAN_KERNEL[5][5] = {
+    {1.0 / 256, 4.0 / 256, 6.0 / 256, 4.0 / 256, 1.0 / 256},
+    {4.0 / 256, 16.0 / 256, 24.0 / 256, 16.0 / 256, 4.0 / 256},
+    {6.0 / 256, 24.0 / 256, 36.0 / 256, 24.0 / 256, 6.0 / 256},
+    {4.0 / 256, 16.0 / 256, 24.0 / 256, 16.0 / 256, 4.0 / 256},
+    {1.0 / 256, 4.0 / 256, 6.0 / 256, 4.0 / 256, 1.0 / 256}};
+
 Image create_image(const char *filename)
 {
     return decompress_jpeg(filename);
@@ -96,7 +103,7 @@ Blender *create_blender(Rect out_size, int nb)
     blender->num_bands = nb;
 
     double max_len = (double)(out_size.width > out_size.height ? out_size.width : out_size.height);
-    blender->num_bands = fmin(blender->num_bands, (int)ceil(log(max_len) / log(2.0)));
+    blender->num_bands = min(blender->num_bands, (int)ceil(log(max_len) / log(2.0)));
 
     out_size.width += ((1 << blender->num_bands) - out_size.width % (1 << blender->num_bands)) % (1 << blender->num_bands);
     out_size.height += ((1 << blender->num_bands) - out_size.height % (1 << blender->num_bands)) % (1 << blender->num_bands);
@@ -188,30 +195,27 @@ void *down_sample_operation(void *args)
         {
             for (int c = 0; c < data->img->channels; ++c)
             {
-                int sum = 0;
-                sum += data->img->data[(2 * y * data->img->width + 2 * x) * data->img->channels + c];
-                sum += data->img->data[(2 * y * data->img->width + 2 * x + 1) * data->img->channels + c];
-                sum += data->img->data[((2 * y + 1) * data->img->width + 2 * x) * data->img->channels + c];
-                sum += data->img->data[((2 * y + 1) * data->img->width + 2 * x + 1) * data->img->channels + c];
 
-                data->sampled[(y * data->new_width + x) * data->img->channels + c] = sum >> 4;
+                double sum_val = 0.0;
+
+                for (int i = -2; i < 3; i++)
+                {
+                    for (int j = -2; j < 3; j++)
+                    {
+                        int src_r = 2 * y + i + c;
+                        int src_c = 2 * x + j + c;
+
+                        int rr = reflect_index(src_r, data->img->height);
+                        int cc = reflect_index(src_c, data->img->width);
+
+                        int pos = (cc + rr * data->img->width) * data->img->channels + c;
+
+                        sum_val += data->img->data[pos] * GAUSSIAN_KERNEL[i + 2][j + 2];
+                    }
+                }
+
+                data->sampled[(y * data->new_width + x) * data->img->channels + c] = (unsigned char)sum_val;
             }
-        }
-    }
-    return NULL;
-}
-
-void *maskdown_sample_operation(void *args)
-{
-    ThreadArgs *arg = (ThreadArgs *)args;
-    int start_row = arg->start_index;
-    int end_row = arg->end_index;
-    SamplingThreadData *data = (SamplingThreadData *)arg->workerThreadArgs->std;
-    for (int y = start_row; y < end_row; ++y)
-    {
-        for (int x = 0; x < data->new_width; ++x)
-        {
-            data->sampled[y * data->new_width + x] = data->img->data[(2 * y) * data->img->width + ((2 * x) + 1)];
         }
     }
     return NULL;
@@ -248,37 +252,23 @@ void *upsample_worker(void *args)
     int start_row = arg->start_index;
     int end_row = arg->end_index;
     SamplingThreadData *s = (SamplingThreadData *)arg->workerThreadArgs->std;
+    int pad = 2;
 
-    for (int y = start_row; y < end_row; ++y)
-    {
-        for (int x = 0; x < s->new_width; ++x)
-        {
-            for (int c = 0; c < s->img->channels; ++c)
-            {
-                float srcX = x / 2.0f;
-                float srcY = y / 2.0f;
-
-                int x0 = (int)srcX;
-                int y0 = (int)srcY;
-                float fx = srcX - x0;
-                float fy = srcY - y0;
-
-                if (x0 >= s->img->width - 1)
-                    x0 = s->img->width - 2;
-                if (y0 >= s->img->height - 1)
-                    y0 = s->img->height - 2;
-
-                unsigned char p00 = s->img->data[(y0 * s->img->width + x0) * s->img->channels + c];
-                unsigned char p01 = s->img->data[(y0 * s->img->width + (x0 + 1)) * s->img->channels + c];
-                unsigned char p10 = s->img->data[((y0 + 1) * s->img->width + x0) * s->img->channels + c];
-                unsigned char p11 = s->img->data[((y0 + 1) * s->img->width + (x0 + 1)) * s->img->channels + c];
-
-                unsigned char interpolated = (unsigned char)((1 - fx) * (1 - fy) * p00 +
-                                                             fx * (1 - fy) * p01 +
-                                                             (1 - fx) * fy * p10 +
-                                                             fx * fy * p11);
-
-                s->sampled[(y * s->new_width + x) * s->img->channels + c] = interpolated;
+    for (int y = start_row; y < end_row; ++y) {
+        for (int x = 0; x < s->img->width; ++x) {
+            for (int c = 0; c < s->img->channels; ++c) {
+                int image_pos = (y * s->img->width + x) * s->img->channels + c;
+                double value = s->img->data[image_pos] * 4;
+    
+                for (int ki = 0; ki < 5; ki++) {
+                    for (int kj = 0; kj < 5; kj++) {
+                        int out_i = reflect_index((y * 2) + ki - pad, s->new_height);
+                        int out_j = reflect_index((x * 2) + kj - pad, s->new_width);
+                        int image_up_pos = (out_i * s->new_width + out_j) * s->img->channels + c;
+                        
+                        s->sampled[image_up_pos] =  (unsigned char)clamp( (int)s->sampled[image_up_pos] + GAUSSIAN_KERNEL[ki][kj] * value,0,255);
+                    }
+                }
             }
         }
     }
@@ -291,7 +281,9 @@ Image upsample(const Image *img)
     Image result;
     int new_width = img->width * 2;
     int new_height = img->height * 2;
-    unsigned char *upsampled = (unsigned char *)malloc(new_width * new_height * img->channels);
+    unsigned char *upsampled = (unsigned char *)calloc(new_width * new_height * img->channels, sizeof(unsigned char));
+
+    ;
     if (!upsampled)
     {
         return result;
@@ -299,7 +291,7 @@ Image upsample(const Image *img)
     SamplingThreadData std = {new_width, new_height, img, upsampled};
     WorkerThreadArgs wtd;
     wtd.std = &std;
-    ParallelOperatorArgs args = {new_height, &wtd};
+    ParallelOperatorArgs args = {img->height, &wtd};
 
     parallel_operator(UPSAMPLE, &args);
 
@@ -441,6 +433,13 @@ int feed(Blender *b, Image *img, Image *mask_img, Point tl)
     int right = br_new.x - tl.x - img->width;
 
     add_border_to_image(img, top, bottom, left, right, CHANNELS, BORDER_REFLECT);
+
+    char buf[100];
+    sprintf(buf,"image%d.jpg",0);
+    if (save_image(img, buf))
+    {
+        printf("Merged image  saved \n");
+    }
     add_border_to_image(mask_img, top, bottom, left, right, 1, BORDER_CONSTANT);
 
     Image images[b->num_bands + 1];
@@ -455,12 +454,6 @@ int feed(Blender *b, Image *img, Image *mask_img, Point tl)
             goto clean;
         }
 
-        // char buf[100];
-        // sprintf(buf,"image%d.jpg",j);
-        // if (save_image(&images[j + 1], buf))
-        // {
-        //     printf("Merged image  saved \n");
-        // }
 
         Image up = upsample(&images[j + 1]);
         if (!up.data)
@@ -582,7 +575,6 @@ void blend(Blender *b)
     }
 }
 
-
 void parallel_operator(OperatorType operatorType, ParallelOperatorArgs *arg)
 {
     int num_threads = get_cpus_count();
@@ -611,14 +603,7 @@ void parallel_operator(OperatorType operatorType, ParallelOperatorArgs *arg)
             thread_data[i].workerThreadArgs = arg->workerThreadArgs;
             if (operatorType == DOWNSAMPLE)
             {
-                if (arg->workerThreadArgs->std->img->channels == 3)
-                {
-                    pthread_create(&threads[i], NULL, down_sample_operation, &thread_data[i]);
-                }
-                else
-                {
-                    pthread_create(&threads[i], NULL, maskdown_sample_operation, &thread_data[i]);
-                }
+                pthread_create(&threads[i], NULL, down_sample_operation, &thread_data[i]);
             }
             else
             {
