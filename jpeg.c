@@ -298,7 +298,7 @@ void add_border_to_image(Image *img,
 
                 for (int c = 0; c < channels; ++c)
                 {
-                    borderedImage[newIdx + c] = img->data[origIdx + c];
+                    borderedImage[newIdx + c] = 0;
                 }
             }
             else if (borderType == BORDER_REFLECT)
@@ -314,6 +314,9 @@ void add_border_to_image(Image *img,
                     origY = borderTop - y - 1;
                 if (y >= (img->height + borderTop))
                     origY = img->height - (y - (img->height + borderTop)) - 1;
+
+                origX = clamp(origX,0,img->width - 1);
+                origY = clamp(origY,0,img->height - 1);
 
                 int origIdx = (origY * (img->width) + origX) * channels;
 

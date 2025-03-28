@@ -16,6 +16,14 @@ typedef struct
     int channels;
 } Image;
 
+typedef struct
+{
+    float *data;
+    int width;
+    int height;
+    int channels;
+} ImageS;
+
 Image decompress_jpeg(const char *filename);
 Image convert_RGB_to_gray(const Image *img);
 int compress_jpeg(const char *outputFilename, const Image *img, int quality);

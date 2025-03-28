@@ -37,8 +37,8 @@ int main()
     printf("Elapsed time for feed 1: %.2f seconds\n", duration);
 
     clock_gettime(CLOCK_MONOTONIC, &start);
-    Point pt2 = {img_buf2.width - out * 2 -100 , 0};
-    // feed(b, &img_buf2, &mask2, pt2);
+    Point pt2 = {img_buf2.width - out * 2  - 100 , 0};
+    feed(b, &img_buf2, &mask2, pt2);
     clock_gettime(CLOCK_MONOTONIC, &end);
     duration = (end.tv_sec - start.tv_sec) + (end.tv_nsec - start.tv_nsec) / 1e9;
     printf("Elapsed time for feed 2: %.2f seconds\n", duration);

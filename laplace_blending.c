@@ -1,7 +1,3 @@
-#ifndef DEBUG
-#define DEBUG 0
-#endif
-
 #include "turbojpeg.h"
 #include <stdlib.h>
 #include <pthread.h>
@@ -13,12 +9,14 @@
 #include "utils.h"
 #include "laplace_blending.h"
 
-const float GAUSSIAN_KERNEL[5][5] = {
+static const float GAUSSIAN_KERNEL[5][5] = {
     {1.0 / 256, 4.0 / 256, 6.0 / 256, 4.0 / 256, 1.0 / 256},
     {4.0 / 256, 16.0 / 256, 24.0 / 256, 16.0 / 256, 4.0 / 256},
     {6.0 / 256, 24.0 / 256, 36.0 / 256, 24.0 / 256, 6.0 / 256},
     {4.0 / 256, 16.0 / 256, 24.0 / 256, 16.0 / 256, 4.0 / 256},
     {1.0 / 256, 4.0 / 256, 6.0 / 256, 4.0 / 256, 1.0 / 256}};
+
+static const float WEIGHT_EPS = 1e-5f;
 
 Image create_image(const char *filename)
 {
@@ -30,6 +28,22 @@ Image create_empty_image(int width, int height, int channels)
     Image img;
 
     img.data = (unsigned char *)calloc(width * height * channels, sizeof(unsigned char));
+    if (!img.data)
+    {
+        return img;
+    }
+    img.channels = channels;
+    img.width = width;
+    img.height = height;
+
+    return img;
+}
+
+ImageS create_empty_image_s(int width, int height, int channels)
+{
+    ImageS img;
+
+    img.data = (float *)calloc(width * height * channels, sizeof(float));
     if (!img.data)
     {
         return img;
@@ -71,7 +85,20 @@ void destroy_image(Image *img)
     }
 }
 
+void destroy_image_s(ImageS *img)
+{
+    if (img->data)
+    {
+        free(img->data);
+    }
+}
+
 int image_size(Image *img)
+{
+    return img->channels * img->height * img->width;
+}
+
+int image_size_s(ImageS *img)
 {
     return img->channels * img->height * img->width;
 }
@@ -100,7 +127,8 @@ Blender *create_blender(Rect out_size, int nb)
     if (!blender)
         return NULL;
 
-    blender->num_bands = nb;
+
+    blender->num_bands = min(7,nb);
 
     double max_len = (double)(out_size.width > out_size.height ? out_size.width : out_size.height);
     blender->num_bands = min(blender->num_bands, (int)ceil(log(max_len) / log(2.0)));
@@ -109,14 +137,16 @@ Blender *create_blender(Rect out_size, int nb)
     out_size.height += ((1 << blender->num_bands) - out_size.height % (1 << blender->num_bands)) % (1 << blender->num_bands);
     blender->output_size = out_size;
 
-    blender->out = (Image *)malloc((blender->num_bands + 1) * sizeof(Image));
-    blender->out_mask = (Image *)malloc((blender->num_bands + 1) * sizeof(Image));
+    blender->out = (ImageS *)malloc((blender->num_bands + 1) * sizeof(ImageS));
+    blender->final_out = (Image *)malloc((blender->num_bands + 1) * sizeof(Image));
+    blender->out_mask = (ImageS *)malloc((blender->num_bands + 1) * sizeof(ImageS));
     blender->out_width_levels = (int *)malloc((blender->num_bands + 1) * sizeof(int));
     blender->out_height_levels = (int *)malloc((blender->num_bands + 1) * sizeof(int));
     blender->img_laplacians = (Image *)malloc((blender->num_bands + 1) * sizeof(Image));
     blender->mask_gaussian = (Image *)malloc((blender->num_bands + 1) * sizeof(Image));
 
     if (!blender->out ||
+        !blender->final_out ||
         !blender->out_mask ||
         !blender->out_width_levels ||
         !blender->out_height_levels ||
@@ -124,6 +154,7 @@ Blender *create_blender(Rect out_size, int nb)
         !blender->mask_gaussian)
     {
         free(blender->out);
+        free(blender->final_out);
         free(blender->out_mask);
         free(blender->out_width_levels);
         free(blender->out_height_levels);
@@ -133,8 +164,8 @@ Blender *create_blender(Rect out_size, int nb)
         return NULL;
     }
 
-    blender->out[0] = create_empty_image(out_size.width, out_size.height, 3);
-    blender->out_mask[0] = create_empty_image(out_size.width, out_size.height, 1);
+    blender->out[0] = create_empty_image_s(out_size.width, out_size.height, 3);
+    blender->out_mask[0] = create_empty_image_s(out_size.width, out_size.height, 1);
 
     blender->out_width_levels[0] = out_size.width;
     blender->out_height_levels[0] = out_size.height;
@@ -144,8 +175,9 @@ Blender *create_blender(Rect out_size, int nb)
         blender->out_width_levels[i] = (blender->out_width_levels[i - 1] + 1) / 2;
         blender->out_height_levels[i] = (blender->out_height_levels[i - 1] + 1) / 2;
 
-        blender->out[i] = create_empty_image(blender->out_width_levels[i], blender->out_height_levels[i], 3);
-        blender->out_mask[i] = create_empty_image(blender->out_width_levels[i], blender->out_height_levels[i], 1);
+        blender->out[i] = create_empty_image_s(blender->out_width_levels[i], blender->out_height_levels[i], 3);
+        blender->out_mask[i] = create_empty_image_s(blender->out_width_levels[i], blender->out_height_levels[i], 1);
+
     }
 
     return blender;
@@ -155,12 +187,6 @@ void destroy_blender(Blender *blender)
 {
     if (!blender)
         return;
-
-    for (int i = 0; i <= blender->num_bands; ++i)
-    {
-        destroy_image(&blender->out[i]);
-        destroy_image(&blender->out_mask[i]);
-    }
 
     if (blender->out != NULL)
     {
@@ -176,6 +202,7 @@ void destroy_blender(Blender *blender)
     free(blender->out_height_levels);
 
     destroy_image(&blender->result);
+    destroy_image(blender->final_out);
 
     free(blender->img_laplacians);
     free(blender->mask_gaussian);
@@ -189,39 +216,46 @@ void *down_sample_operation(void *args)
     int start_row = arg->start_index;
     int end_row = arg->end_index;
     SamplingThreadData *data = (SamplingThreadData *)arg->workerThreadArgs->std;
+
+    int imageSize = image_size(data->img);
+
     for (int y = start_row; y < end_row; ++y)
     {
         for (int x = 0; x < data->new_width; ++x)
         {
             for (int c = 0; c < data->img->channels; ++c)
             {
-
-                double sum_val = 0.0;
-
+                float sum = 0.0;
                 for (int i = -2; i < 3; i++)
                 {
                     for (int j = -2; j < 3; j++)
                     {
-                        int src_r = 2 * y + i + c;
-                        int src_c = 2 * x + j + c;
+                        int src_row = 2 * y + i;
+                        int src_col = 2 * x + j;
 
-                        int rr = reflect_index(src_r, data->img->height);
-                        int cc = reflect_index(src_c, data->img->width);
+                        int rr = reflect_index(src_row, data->img->height);
+                        int cc = reflect_index(src_col, data->img->width);
 
                         int pos = (cc + rr * data->img->width) * data->img->channels + c;
 
-                        sum_val += data->img->data[pos] * GAUSSIAN_KERNEL[i + 2][j + 2];
+                        if (pos < imageSize)
+                        {
+                            sum += GAUSSIAN_KERNEL[i + 2][j + 2] * data->img->data[pos];
+                        }
+                        
+                        
                     }
                 }
 
-                data->sampled[(y * data->new_width + x) * data->img->channels + c] = (unsigned char)sum_val;
+                data->sampled[(y * data->new_width + x) * data->img->channels + c] = (unsigned char)clamp(ceil(sum), 0, 255);
             }
         }
     }
+
     return NULL;
 }
 
-Image downsample(const Image *img)
+Image downsample(Image *img)
 {
     Image result;
     int new_width = img->width / 2;
@@ -232,7 +266,7 @@ Image downsample(const Image *img)
         return result;
     }
 
-    SamplingThreadData std = {new_width, new_height, img, downsampled};
+    SamplingThreadData std = {0,new_width, new_height, img, downsampled};
     WorkerThreadArgs wtd;
     wtd.std = &std;
     ParallelOperatorArgs args = {new_height, &wtd};
@@ -254,21 +288,36 @@ void *upsample_worker(void *args)
     SamplingThreadData *s = (SamplingThreadData *)arg->workerThreadArgs->std;
     int pad = 2;
 
-    for (int y = start_row; y < end_row; ++y) {
-        for (int x = 0; x < s->img->width; ++x) {
-            for (int c = 0; c < s->img->channels; ++c) {
-                int image_pos = (y * s->img->width + x) * s->img->channels + c;
-                double value = s->img->data[image_pos] * 4;
-    
-                for (int ki = 0; ki < 5; ki++) {
-                    for (int kj = 0; kj < 5; kj++) {
-                        int out_i = reflect_index((y * 2) + ki - pad, s->new_height);
-                        int out_j = reflect_index((x * 2) + kj - pad, s->new_width);
-                        int image_up_pos = (out_i * s->new_width + out_j) * s->img->channels + c;
-                        
-                        s->sampled[image_up_pos] =  (unsigned char)clamp( (int)s->sampled[image_up_pos] + GAUSSIAN_KERNEL[ki][kj] * value,0,255);
+    for (int y = start_row; y < end_row; ++y)
+    {
+        for (int x = 0; x < s->new_width; ++x)
+        {
+            for (int c = 0; c < s->img->channels; ++c)
+            {
+                float sum = 0;
+
+                for (int ki = 0; ki < 5; ki++)
+                {
+                    for (int kj = 0; kj < 5; kj++)
+                    {
+                        int src_i = reflect_index(y + ki - pad, s->new_height);
+                        int src_j = reflect_index(x + kj - pad, s->new_width);
+
+                        int pixel_val = 0;
+                        if (src_i % 2 == 0 && src_j % 2 == 0)
+                        {
+                            int orig_i = src_i / 2;
+                            int orig_j = src_j / 2;
+                            int image_pos = (orig_i * s->img->width + orig_j) * s->img->channels + c;
+                            pixel_val = s->img->data[image_pos] * s->upsample_factor;
+                        }
+
+                        sum += GAUSSIAN_KERNEL[ki][kj] * pixel_val;
                     }
                 }
+
+                int up_image_pos = (y * s->new_width + x) * s->img->channels + c;
+                s->sampled[up_image_pos] = (unsigned char)clamp(floor(sum + 0.5), 0, 255);
             }
         }
     }
@@ -276,22 +325,20 @@ void *upsample_worker(void *args)
     return NULL;
 }
 
-Image upsample(const Image *img)
+Image upsample(Image *img,float upsample_factor)
 {
     Image result;
     int new_width = img->width * 2;
     int new_height = img->height * 2;
     unsigned char *upsampled = (unsigned char *)calloc(new_width * new_height * img->channels, sizeof(unsigned char));
-
-    ;
     if (!upsampled)
     {
         return result;
     }
-    SamplingThreadData std = {new_width, new_height, img, upsampled};
+    SamplingThreadData std = {upsample_factor,new_width, new_height, img, upsampled};
     WorkerThreadArgs wtd;
     wtd.std = &std;
-    ParallelOperatorArgs args = {img->height, &wtd};
+    ParallelOperatorArgs args = {new_height, &wtd};
 
     parallel_operator(UPSAMPLE, &args);
 
@@ -312,35 +359,22 @@ void *compute_laplacian_worker(void *args)
 
     for (int i = start_row; i < end_row; ++i)
     {
-        data->laplacian_data[i] = (unsigned char)clamp(data->original_data[i] - data->upsampled_data[i], 1, 256) - 1;
+        data->upsampled_data[i] = (unsigned char)clamp(data->original_data[i] - data->upsampled_data[i], 0, 255);
     }
 
     return NULL;
 }
 
-Image compute_laplacian(Image *original, Image *upsampled)
+void compute_laplacian(Image *original, Image *upsampled)
 {
-    Image result;
     int total_size = original->width * original->height * original->channels;
-    unsigned char *laplacian = (unsigned char *)malloc(total_size);
-    if (!laplacian)
-    {
-        return result;
-    }
 
-    LaplacianThreadData ltd = {original->data, upsampled->data, laplacian, total_size};
+    LaplacianThreadData ltd = {original->data, upsampled->data, total_size};
     WorkerThreadArgs wtd;
     wtd.ltd = &ltd;
     ParallelOperatorArgs args = {total_size, &wtd};
 
     parallel_operator(LAPLACIAN, &args);
-
-    result.data = laplacian;
-    result.width = original->width;
-    result.height = original->height;
-    result.channels = original->channels;
-
-    return result;
 }
 
 void *feed_worker(void *args)
@@ -354,48 +388,48 @@ void *feed_worker(void *args)
     {
         for (int i = 0; i < f->cols; ++i)
         {
+            int maskIndex = i + (k * f->level_width);
+            int outMaskLevelIndex = ((i + f->x_tl) + ((k + f->y_tl) * f->out_level_width));
+
             for (int z = 0; z < CHANNELS; ++z)
             {
                 int imgIndex = ((i + (k * f->level_width)) * CHANNELS) + z;
-                int maskIndex = imgIndex / CHANNELS;
 
                 if (imgIndex < f->img_laplacians[f->level].width * f->img_laplacians[f->level].height * CHANNELS &&
                     maskIndex < f->mask_gaussian[f->level].width * f->mask_gaussian[f->level].height)
                 {
 
-                    int outLevelIndex = (((i + f->x_tl) + ((k + f->y_tl) * f->out_level_width)) * CHANNELS) + z;
-                    int outMaskLevelIndex = ((i + f->x_tl) + ((k + f->y_tl) * f->out_level_width));
+                    int outLevelIndex = ((i + f->x_tl) + (k + f->y_tl) * f->out_level_width) * CHANNELS + z;
 
-                    int imgVal = f->img_laplacians[f->level].data[imgIndex];
-                    int maskVal = (f->mask_gaussian[f->level].data[maskIndex] + 1) >> 8;
+                    float maskVal = f->mask_gaussian[f->level].data[maskIndex];
+                    float imgVal = f->img_laplacians[f->level].data[imgIndex];
 
-                    if (outLevelIndex < f->out_level_height * f->out_level_width * CHANNELS)
+                    maskVal = maskVal * (1.0 / 255.0);
+
+                    imgVal = imgVal * maskVal;
+
+                    if (outLevelIndex < f->out_level_height * f->out_level_width * CHANNELS &&
+                        outMaskLevelIndex < f->out_level_height * f->out_level_width)
                     {
-                        if (maskVal >= 1)
+                        f->out[f->level].data[outLevelIndex] += imgVal;
+
+                        if (z == 0)
                         {
-
-                            if (z == 0)
-                            {
-                                f->out_mask[f->level].data[outMaskLevelIndex] += maskVal;
-                            }
-
-                            int oldVal = f->out[f->level].data[outLevelIndex];
-                            int avg = oldVal + ((imgVal - oldVal) / f->out_mask[f->level].data[outMaskLevelIndex]);
-
-                            f->out[f->level].data[outLevelIndex] = avg;
+                            f->out_mask[f->level].data[outMaskLevelIndex] += maskVal;
                         }
                     }
                 }
             }
         }
     }
+
     return NULL;
 }
 
 int feed(Blender *b, Image *img, Image *mask_img, Point tl)
 {
+    char buf[100];
     int return_val = 1;
-    int num_threads = get_cpus_count();
 
     int gap = 3 * (1 << b->num_bands);
     Point tl_new, br_new;
@@ -433,13 +467,6 @@ int feed(Blender *b, Image *img, Image *mask_img, Point tl)
     int right = br_new.x - tl.x - img->width;
 
     add_border_to_image(img, top, bottom, left, right, CHANNELS, BORDER_REFLECT);
-
-    char buf[100];
-    sprintf(buf,"image%d.jpg",0);
-    if (save_image(img, buf))
-    {
-        printf("Merged image  saved \n");
-    }
     add_border_to_image(mask_img, top, bottom, left, right, 1, BORDER_CONSTANT);
 
     Image images[b->num_bands + 1];
@@ -454,16 +481,15 @@ int feed(Blender *b, Image *img, Image *mask_img, Point tl)
             goto clean;
         }
 
-
-        Image up = upsample(&images[j + 1]);
+        Image up = upsample(&images[j + 1],4.f);
         if (!up.data)
         {
             return_val = 0;
             goto clean;
         }
 
-        b->img_laplacians[j] = compute_laplacian(&images[j], &up);
-        destroy_image(&up);
+        compute_laplacian(&images[j], &up);
+        b->img_laplacians[j] = up;
     }
 
     b->img_laplacians[b->num_bands] = images[b->num_bands];
@@ -507,6 +533,7 @@ int feed(Blender *b, Image *img, Image *mask_img, Point tl)
         ftd.mask_gaussian = b->mask_gaussian;
         ftd.out = b->out;
         ftd.out_mask = b->out_mask;
+
         WorkerThreadArgs wtd;
         wtd.ftd = &ftd;
         ParallelOperatorArgs args = {rows, &wtd};
@@ -539,56 +566,98 @@ void *blend_worker(void *args)
     return NULL;
 }
 
+void *normalize_worker(void *args)
+{
+    ThreadArgs *arg = (ThreadArgs *)args;
+    int start_row = arg->start_index;
+    int end_row = arg->end_index;
+    NormalThreadData *n = (NormalThreadData *)arg->workerThreadArgs->ntd;
+
+    for (int y = start_row; y < end_row; ++y)
+    {
+        for (int x = 0; x < n->output_width; ++x)
+        {
+            int maskIndex = x + (y * n->output_width);
+            if (maskIndex < image_size_s(&n->out_mask[n->level]))
+            {
+                float w = n->out_mask[n->level].data[maskIndex];
+
+                for (int z = 0; z < CHANNELS; z++)
+                {
+                    int imgIndex = (x + (y * n->output_width)) * CHANNELS + z;
+                    if (imgIndex < image_size(&n->final_out[n->level]))
+                    {
+
+                        n->final_out[n->level].data[imgIndex] = (n->out[n->level].data[imgIndex] / (w + WEIGHT_EPS));
+                    }
+                }
+            }
+        }
+    }
+    return NULL;
+}
+
 void blend(Blender *b)
 {
-    clock_t start = clock();
 
-    Image blended_image = b->out[b->num_bands];
+    char buf[100];
+
+    for (int level = 0; level <= b->num_bands; ++level)
+    {
+        b->final_out[level] = create_empty_image(b->out[level].width, b->out[level].height, b->out[level].channels);
+
+        NormalThreadData ntd = {b->out[level].width, level, b->out, b->out_mask, b->final_out};
+        WorkerThreadArgs wtd;
+        wtd.ntd = &ntd;
+        ParallelOperatorArgs args = {b->out[level].height, &wtd};
+
+        parallel_operator(NORMALIZE, &args);
+        destroy_image_s(&b->out[level]);
+        destroy_image_s(&b->out_mask[level]);
+    }
+
+    Image blended_image = b->final_out[b->num_bands];
     Image ubi;
 
     for (int level = b->num_bands; level > 0; --level)
     {
-        ubi = upsample(&blended_image);
+        ubi = upsample(&blended_image,4.f);
         blended_image = ubi;
-        int out_size = image_size(&b->out[level - 1]);
+        int out_size = image_size(&b->final_out[level - 1]);
 
-        BlendThreadData btd = {out_size, blended_image, b->out[level - 1]};
+        BlendThreadData btd = {out_size, blended_image, b->final_out[level - 1]};
         WorkerThreadArgs wtd;
         wtd.btd = &btd;
         ParallelOperatorArgs args = {out_size, &wtd};
         parallel_operator(BLEND, &args);
     }
 
-    b->result.data = (unsigned char *)malloc(image_size(&blended_image));
+    b->result.data = (unsigned char *)malloc(b->output_size.width * b->output_size.height * CHANNELS * sizeof(unsigned char));
     b->result.channels = blended_image.channels;
     b->result.width = blended_image.width;
     b->result.height = blended_image.height;
-    memmove(b->result.data, blended_image.data, image_size(&blended_image));
-
+    memcpy(b->result.data, blended_image.data, image_size(&blended_image));
     free(ubi.data);
-
-    if (DEBUG)
-    {
-        clock_t end = clock();
-        double duration = (double)(end - start) / CLOCKS_PER_SEC;
-        printf("Elapsed time for blend: %.2f seconds\n", duration);
-    }
 }
 
 void parallel_operator(OperatorType operatorType, ParallelOperatorArgs *arg)
 {
-    int num_threads = get_cpus_count();
-
-    int rowsPerThread = arg->rows / num_threads;
-    int remainingRows = arg->rows % num_threads;
-
-    pthread_t threads[num_threads];
-    ThreadArgs thread_data[num_threads];
-
-    int start_row = 0;
-    for (unsigned int i = 0; i < num_threads; ++i)
+    int numThreads = get_cpus_count();
+    if (operatorType == FEED || operatorType == NORMALIZE)
     {
-        int end_row = start_row + rowsPerThread + (remainingRows > 0 ? 1 : 0);
+        numThreads = 1;
+    }
+
+    int rowsPerThread = arg->rows / numThreads;
+    int remainingRows = arg->rows % numThreads;
+
+    pthread_t threads[numThreads];
+    ThreadArgs thread_data[numThreads];
+
+    int startRow = 0;
+    for (unsigned int i = 0; i < numThreads; ++i)
+    {
+        int endRow = startRow + rowsPerThread + (remainingRows > 0 ? 1 : 0);
         if (remainingRows > 0)
         {
             --remainingRows;
@@ -598,8 +667,8 @@ void parallel_operator(OperatorType operatorType, ParallelOperatorArgs *arg)
         {
         case UPSAMPLE:
         case DOWNSAMPLE:
-            thread_data[i].end_index = end_row;
-            thread_data[i].start_index = start_row;
+            thread_data[i].end_index = endRow;
+            thread_data[i].start_index = startRow;
             thread_data[i].workerThreadArgs = arg->workerThreadArgs;
             if (operatorType == DOWNSAMPLE)
             {
@@ -612,29 +681,35 @@ void parallel_operator(OperatorType operatorType, ParallelOperatorArgs *arg)
 
             break;
         case FEED:
-            thread_data[i].end_index = end_row;
-            thread_data[i].start_index = start_row;
+            thread_data[i].end_index = endRow;
+            thread_data[i].start_index = startRow;
             thread_data[i].workerThreadArgs = arg->workerThreadArgs;
             pthread_create(&threads[i], NULL, feed_worker, &thread_data[i]);
             break;
         case LAPLACIAN:
-            thread_data[i].end_index = end_row;
-            thread_data[i].start_index = start_row;
+            thread_data[i].end_index = endRow;
+            thread_data[i].start_index = startRow;
             thread_data[i].workerThreadArgs = arg->workerThreadArgs;
             pthread_create(&threads[i], NULL, compute_laplacian_worker, &thread_data[i]);
             break;
         case BLEND:
-            thread_data[i].end_index = end_row;
-            thread_data[i].start_index = start_row;
+            thread_data[i].end_index = endRow;
+            thread_data[i].start_index = startRow;
             thread_data[i].workerThreadArgs = arg->workerThreadArgs;
             pthread_create(&threads[i], NULL, blend_worker, &thread_data[i]);
             break;
+        case NORMALIZE:
+            thread_data[i].end_index = endRow;
+            thread_data[i].start_index = startRow;
+            thread_data[i].workerThreadArgs = arg->workerThreadArgs;
+            pthread_create(&threads[i], NULL, normalize_worker, &thread_data[i]);
+            break;
         }
 
-        start_row = end_row;
+        startRow = endRow;
     }
 
-    for (unsigned int i = 0; i < num_threads; ++i)
+    for (unsigned int i = 0; i < numThreads; ++i)
     {
         pthread_join(threads[i], NULL);
     }
