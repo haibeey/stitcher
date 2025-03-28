@@ -12,4 +12,7 @@ builds
 builds/*
 installs
 installs/*
-*stitch.dSYM*
+tests/test
+*.dSYM*
+downsampled
+test
