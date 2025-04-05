@@ -1,5 +1,6 @@
 #include "jpeg.h"
 
+#define MAX_BANDS 7
 typedef enum
 {
     DOWNSAMPLE,
@@ -25,7 +26,7 @@ typedef struct
 } Rect;
 
 Point br(Rect r);
-Rect create_rect(int x, int y, int width, int height);
+
 
 typedef struct
 {
@@ -33,8 +34,8 @@ typedef struct
     Rect output_size;
     int *out_width_levels;
     int *out_height_levels;
-    ImageS *out;
-    ImageS *out_mask;
+    ImageF *out;
+    ImageF *out_mask;
     Image *final_out;
     Image result;
     Image *img_laplacians;
@@ -46,8 +47,8 @@ typedef struct
     float upsample_factor;
     int new_width;
     int new_height;
-    Image *img;
-    unsigned char *sampled;
+    void *img;
+    void *sampled;
 } SamplingThreadData;
 
 typedef struct
@@ -70,16 +71,16 @@ typedef struct
     int level;
     Image *img_laplacians;
     Image *mask_gaussian;
-    ImageS *out;
-    ImageS *out_mask;
+    ImageF *out;
+    ImageF *out_mask;
 } FeedThreadData;
 
 typedef struct
 {
     int output_width;
     int level;
-    ImageS *out;
-    ImageS *out_mask;
+    ImageF *out;
+    ImageF *out_mask;
     Image *final_out;
 } NormalThreadData;
 

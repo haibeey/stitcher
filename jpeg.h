@@ -1,6 +1,6 @@
-#ifndef CHANNELS
+#ifndef IMAGE_HEADERS
+#define IMAGE_HEADERS
 #define CHANNELS 3
-#endif
 
 typedef enum {
     BORDER_CONSTANT,
@@ -22,7 +22,16 @@ typedef struct
     int width;
     int height;
     int channels;
+} ImageF;
+
+typedef struct
+{
+    short *data;
+    int width;
+    int height;
+    int channels;
 } ImageS;
+
 
 Image decompress_jpeg(const char *filename);
 Image convert_RGB_to_gray(const Image *img);
@@ -35,3 +44,4 @@ void add_border_to_image(Image *img,
                       int channels, BorderType borderType);
 
 void crop_image_buf(Image *img,int cut_top, int cut_bottom, int cut_left, int cut_right,int channels);
+#endif
