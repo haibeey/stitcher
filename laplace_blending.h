@@ -36,10 +36,10 @@ typedef struct
     int *out_height_levels;
     ImageF *out;
     ImageF *out_mask;
-    Image *final_out;
+    ImageS *final_out;
     Image result;
-    Image *img_laplacians;
-    Image *mask_gaussian;
+    ImageS *img_laplacians;
+    ImageS *mask_gaussian;
 } Blender;
 
 typedef struct
@@ -49,12 +49,13 @@ typedef struct
     int new_height;
     void *img;
     void *sampled;
+    ImageType image_type;
 } SamplingThreadData;
 
 typedef struct
 {
-    unsigned char *original_data;
-    unsigned char *upsampled_data;
+    ImageS *original;
+    ImageS *upsampled;
     int total_size;
 } LaplacianThreadData;
 
@@ -69,8 +70,8 @@ typedef struct
     int level_width;
     int level_height;
     int level;
-    Image *img_laplacians;
-    Image *mask_gaussian;
+    ImageS *img_laplacians;
+    ImageS *mask_gaussian;
     ImageF *out;
     ImageF *out_mask;
 } FeedThreadData;
@@ -81,14 +82,14 @@ typedef struct
     int level;
     ImageF *out;
     ImageF *out_mask;
-    Image *final_out;
+    ImageS *final_out;
 } NormalThreadData;
 
 typedef struct
 {
     int out_size;
-    Image blended_image;
-    Image out_level;
+    ImageS blended_image;
+    ImageS out_level;
 } BlendThreadData;
 
 typedef union

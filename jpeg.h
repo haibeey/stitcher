@@ -33,6 +33,12 @@ typedef struct
 } ImageS;
 
 
+typedef enum {
+    IMAGE,
+    IMAGES,
+    IMAGEF
+} ImageType;
+
 Image decompress_jpeg(const char *filename);
 Image convert_RGB_to_gray(const Image *img);
 int compress_jpeg(const char *outputFilename, const Image *img, int quality);
@@ -44,4 +50,8 @@ void add_border_to_image(Image *img,
                       int channels, BorderType borderType);
 
 void crop_image_buf(Image *img,int cut_top, int cut_bottom, int cut_left, int cut_right,int channels);
+void convert_image_to_image_f(Image* in , ImageF *out);
+void convert_image_to_image_s(Image* in , ImageS *out);
+void convert_imagef_to_image(ImageF* in , Image *out);
+void convert_images_to_image(ImageS* in , Image *out);
 #endif

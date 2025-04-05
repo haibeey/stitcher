@@ -6,7 +6,6 @@
 #include "utils.h"
 #include "jpeg.h"
 
-
 Image decompress_jpeg(const char *filename)
 {
     Image result;
@@ -52,7 +51,7 @@ Image decompress_jpeg(const char *filename)
     }
 
     result.data = (unsigned char *)malloc(result.width * result.height * 3);
-    if (!result.data )
+    if (!result.data)
     {
         fprintf(stderr, "Failed to allocate memory for image buffer.\n");
         free(jpegBuf);
@@ -60,8 +59,7 @@ Image decompress_jpeg(const char *filename)
         return result;
     }
 
-
-    if (tjDecompress2(handle, jpegBuf, fileSize, result.data , result.width, 0, result.height, TJPF_RGB, TJFLAG_FASTDCT) < 0)
+    if (tjDecompress2(handle, jpegBuf, fileSize, result.data, result.width, 0, result.height, TJPF_RGB, TJFLAG_FASTDCT) < 0)
     {
         fprintf(stderr, "Failed to decompress JPEG: %s\n", tjGetErrorStr());
         free(jpegBuf);
@@ -98,7 +96,6 @@ Image convert_RGB_to_gray(const Image *img)
     result.width = img->width;
     result.height = img->height;
     result.data = grayBuffer;
-
 
     return result;
 }
@@ -260,8 +257,8 @@ Image create_vertical_mask(int width, int height, float range, int top, int bott
 }
 
 void add_border_to_image(Image *img,
-    int borderTop, int borderBottom, int borderLeft, int borderRight,
-    int channels, BorderType borderType)
+                         int borderTop, int borderBottom, int borderLeft, int borderRight,
+                         int channels, BorderType borderType)
 {
     int newWidth = img->width + borderLeft + borderRight;
     int newHeight = img->height + borderTop + borderBottom;
@@ -315,8 +312,8 @@ void add_border_to_image(Image *img,
                 if (y >= (img->height + borderTop))
                     origY = img->height - (y - (img->height + borderTop)) - 1;
 
-                origX = clamp(origX,0,img->width - 1);
-                origY = clamp(origY,0,img->height - 1);
+                origX = clamp(origX, 0, img->width - 1);
+                origY = clamp(origY, 0, img->height - 1);
 
                 int origIdx = (origY * (img->width) + origX) * channels;
 
@@ -335,24 +332,27 @@ void add_border_to_image(Image *img,
     img->height = newHeight;
 }
 
-void crop_image_buf(Image *img,int cut_top, int cut_bottom, int cut_left, int cut_right,int channels)
+void crop_image_buf(Image *img, int cut_top, int cut_bottom, int cut_left, int cut_right, int channels)
 {
     int new_width = img->width - cut_left - cut_right;
     int new_height = img->height - cut_top - cut_bottom;
 
-    if (new_width <= 0 || new_height <= 0) {
+    if (new_width <= 0 || new_height <= 0)
+    {
         return;
     }
 
     unsigned char *cropped = (unsigned char *)malloc(new_width * new_height * channels);
 
-    if (!cropped) {
-        return; 
+    if (!cropped)
+    {
+        return;
     }
 
-    for (int y = 0; y < new_height; y++) {
+    for (int y = 0; y < new_height; y++)
+    {
         int src_y = y + cut_top;
-        int src_offset = (src_y * (img->width ) + cut_left) * channels;
+        int src_offset = (src_y * (img->width) + cut_left) * channels;
         int dest_offset = y * new_width * channels;
         memcpy(cropped + dest_offset, img->data + src_offset, new_width * channels);
     }
@@ -362,3 +362,18 @@ void crop_image_buf(Image *img,int cut_top, int cut_bottom, int cut_left, int cu
     img->width = new_width;
     img->height = new_height;
 }
+
+#define IMAGE_CONVERT_FUNC(NAME, IMAGE_T_IN, IMAGE_T_OUT, OUT_TYPE)        \
+    void NAME(IMAGE_T_IN* in, IMAGE_T_OUT* out)                            \
+    {                                                                      \
+        for (size_t i = 0; i < in->channels * in->height * in->width; i++) \
+        {                                                                  \
+            out->data[i] = (OUT_TYPE)clamp((int)in->data[i], 0, 255);      \
+        }                                                                  \
+    }
+
+IMAGE_CONVERT_FUNC(convert_image_to_image_f, Image, ImageF, float)
+IMAGE_CONVERT_FUNC(convert_image_to_image_s, Image, ImageS, short)
+IMAGE_CONVERT_FUNC(convert_imagef_to_image, ImageF, Image, unsigned char)
+IMAGE_CONVERT_FUNC(convert_images_to_image, ImageS, Image, unsigned char)
+
