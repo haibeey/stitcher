@@ -236,9 +236,7 @@ clean(){
 }
 
 test(){
-  pushd "tests"
-    gcc-14 -I../ -I/usr/local/include -L/usr/local/lib -lturbojpeg -pthread -fsanitize=address -g -o test  ../laplace_blending.c ../jpeg.c ../utils.c ../test.c && ./test
-  popd
+    gcc-14 -I../ -I/usr/local/include -L/usr/local/lib -lturbojpeg -pthread -fsanitize=address -g -o test  ../laplace_blending.c ../jpeg.c ../utils.c ./test.c && ./test
 }
 
 help() {

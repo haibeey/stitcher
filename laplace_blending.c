@@ -67,7 +67,7 @@ void crop_image(Image *img, int cut_top, int cut_bottom, int cut_left, int cut_r
 #define DEFINE_DESTROY_IMAGE_FUNC(NAME, PIXEL_T) \
     void NAME(PIXEL_T *img)                      \
     {                                            \
-        if (img->data != NULL)                           \
+        if (img->data != NULL)                   \
         {                                        \
             free(img->data);                     \
         }                                        \
@@ -228,10 +228,6 @@ void destroy_blender(Blender *blender)
                     {                                                                  \
                         sum = (PIXEL_T)clamp(ceil(sum), 0, 255);                       \
                     }                                                                  \
-                    else if (data->image_type == IMAGES)                               \
-                    {                                                                  \
-                        sum = ceil(sum);                                               \
-                    }                                                                  \
                     sampled[(y * data->new_width + x) * img->channels + c] = sum;      \
                 }                                                                      \
             }                                                                          \
@@ -240,8 +236,8 @@ void destroy_blender(Blender *blender)
     }
 
 DEFINE_DOWNSAMPLE_WORKER_FUNC(down_sample_operation, Image, unsigned char)
-DEFINE_DOWNSAMPLE_WORKER_FUNC(down_sample_operation_f, Image, float)
-DEFINE_DOWNSAMPLE_WORKER_FUNC(down_sample_operation_s, Image, short)
+DEFINE_DOWNSAMPLE_WORKER_FUNC(down_sample_operation_f, ImageF, float)
+DEFINE_DOWNSAMPLE_WORKER_FUNC(down_sample_operation_s, ImageS, short)
 
 #define DEFINE_DOWNSAMPLE_FUNC(NAME, IMAGE_T, PIXEL_T, IMAGE_T_ENUM)                                        \
     IMAGE_T NAME(IMAGE_T *img)                                                                              \
@@ -308,10 +304,6 @@ DEFINE_DOWNSAMPLE_FUNC(downsample_f, ImageF, float, IMAGEF)
                     if (s->image_type == IMAGE)                                                     \
                     {                                                                               \
                         sum = (PIXEL_T)clamp(floor(sum + 0.5), 0, 255);                             \
-                    }                                                                               \
-                    else if (s->image_type == IMAGES)                                               \
-                    {                                                                               \
-                        sum = floor(sum + 0.5);                                                     \
                     }                                                                               \
                     sampled[up_image_pos] = sum;                                                    \
                 }                                                                                   \
@@ -431,7 +423,7 @@ void *feed_worker(void *args)
 
 int feed(Blender *b, Image *img, Image *mask_img, Point tl)
 {
-    char buf[100];
+    ImageS images[b->num_bands + 1];
     int return_val = 1;
 
     int gap = 3 * (1 << b->num_bands);
@@ -472,12 +464,10 @@ int feed(Blender *b, Image *img, Image *mask_img, Point tl)
     add_border_to_image(img, top, bottom, left, right, CHANNELS, BORDER_REFLECT);
     add_border_to_image(mask_img, top, bottom, left, right, 1, BORDER_CONSTANT);
 
-    ImageS images[b->num_bands + 1];
     images[0] = create_empty_image_s(img->width, img->height, img->channels);
     convert_image_to_image_s(img, &images[0]);
     for (int j = 0; j < b->num_bands; ++j)
     {
-
         images[j + 1] = downsample_s(&images[j]);
         if (!images[j + 1].data)
         {
@@ -485,20 +475,19 @@ int feed(Blender *b, Image *img, Image *mask_img, Point tl)
             goto clean;
         }
 
-        ImageS up = upsample_image_s(&images[j + 1], 4.f);
-        if (!up.data)
+        b->img_laplacians[j] = upsample_image_s(&images[j + 1], 4.f);
+        if (!&b->img_laplacians[j])
         {
             return_val = 0;
             goto clean;
         }
 
-        compute_laplacian(&images[j], &up);
-        b->img_laplacians[j] = up;
+        compute_laplacian(&images[j], &b->img_laplacians[j]);
     }
 
     b->img_laplacians[b->num_bands] = images[b->num_bands];
     ImageS sampled;
-    ImageS mask_img_ = create_empty_image_s(mask_img->width,mask_img->height,mask_img->channels);
+    ImageS mask_img_ = create_empty_image_s(mask_img->width, mask_img->height, mask_img->channels);
     convert_image_to_image_s(mask_img, &mask_img_);
     for (int j = 0; j < b->num_bands; ++j)
     {
@@ -552,6 +541,11 @@ int feed(Blender *b, Image *img, Image *mask_img, Point tl)
         y_br /= 2;
     }
 clean:
+    for (size_t i = 0; i <= b->num_bands; i++)
+    {
+        destroy_image_s(&images[i]);
+    }
+
     return return_val;
 }
 
@@ -565,8 +559,7 @@ void *blend_worker(void *args)
     {
         if (i < b->out_size)
         {
-            b->blended_image.data[i] = clamp(
-                b->blended_image.data[i] + b->out_level.data[i], 0, 255);
+            b->blended_image.data[i] = b->blended_image.data[i] + b->out_level.data[i];
         }
     }
     return NULL;
@@ -594,7 +587,7 @@ void *normalize_worker(void *args)
                     if (imgIndex < image_size_s(&n->final_out[n->level]))
                     {
 
-                        n->final_out[n->level].data[imgIndex] = (n->out[n->level].data[imgIndex] / (w + WEIGHT_EPS));
+                        n->final_out[n->level].data[imgIndex] = (short)(n->out[n->level].data[imgIndex] / (w + WEIGHT_EPS));
                     }
                 }
             }
@@ -605,9 +598,6 @@ void *normalize_worker(void *args)
 
 void blend(Blender *b)
 {
-
-    char buf[100];
-
     for (int level = 0; level <= b->num_bands; ++level)
     {
         b->final_out[level] = create_empty_image_s(b->out[level].width, b->out[level].height, b->out[level].channels);
@@ -623,12 +613,10 @@ void blend(Blender *b)
     }
 
     ImageS blended_image = b->final_out[b->num_bands];
-    ImageS ubi;
 
     for (int level = b->num_bands; level > 0; --level)
     {
-        ubi = upsample_image_s(&blended_image, 4.f);
-        blended_image = ubi;
+        blended_image = upsample_image_s(&blended_image, 4.f);
         int out_size = image_size_s(&b->final_out[level - 1]);
 
         BlendThreadData btd = {out_size, blended_image, b->final_out[level - 1]};
@@ -643,18 +631,13 @@ void blend(Blender *b)
     b->result.width = blended_image.width;
     b->result.height = blended_image.height;
 
-    convert_images_to_image(&blended_image,&b->result);
-    free(ubi.data);
+    convert_images_to_image(&blended_image, &b->result);
+    free(blended_image.data);
 }
 
 void parallel_operator(OperatorType operatorType, ParallelOperatorArgs *arg)
 {
     int numThreads = get_cpus_count();
-    if (operatorType == FEED || operatorType == NORMALIZE)
-    {
-        numThreads = 1;
-    }
-
     int rowsPerThread = arg->rows / numThreads;
     int remainingRows = arg->rows % numThreads;
 
@@ -693,7 +676,6 @@ void parallel_operator(OperatorType operatorType, ParallelOperatorArgs *arg)
                 default:
                     break;
                 }
-               
             }
             else
             {
@@ -711,7 +693,6 @@ void parallel_operator(OperatorType operatorType, ParallelOperatorArgs *arg)
                 default:
                     break;
                 }
-                
             }
 
             break;
