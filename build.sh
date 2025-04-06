@@ -235,6 +235,10 @@ clean(){
   fi
 }
 
+test(){
+    gcc-14 -I../ -I/usr/local/include -L/usr/local/lib -lturbojpeg -pthread -fsanitize=address -g -o test  ../laplace_blending.c ../jpeg.c ../utils.c ./test.c && ./test
+}
+
 help() {
   echo "
 Command: build.sh
@@ -271,7 +275,14 @@ case "$1" in
         ;;
       esac
       ;;
+  test)
+    test
+    ;;
   *)
   help
   ;;
 esac
+
+
+# gcc-14 -I../ -I/usr/local/include -L/usr/local/lib -lturbojpeg -pthread -fsanitize=address -g -o downsampled ../laplace_blending.c ../jpeg.c ../utils.c downsampling.c && ./downsampled
+# gcc-14 -I../ -I/usr/local/include -L/usr/local/lib -lturbojpeg -pthread -fsanitize=address -g -o stitch  ../laplace_blending.c ../jpeg.c ../utils.c stitch.c && ./stitch

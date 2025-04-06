@@ -1,12 +1,14 @@
 #include "jpeg.h"
 
+#define MAX_BANDS 7
 typedef enum
 {
     DOWNSAMPLE,
     UPSAMPLE,
     LAPLACIAN,
     FEED,
-    BLEND
+    BLEND,
+    NORMALIZE
 } OperatorType;
 
 typedef struct
@@ -24,7 +26,7 @@ typedef struct
 } Rect;
 
 Point br(Rect r);
-Rect create_rect(int x, int y, int width, int height);
+
 
 typedef struct
 {
@@ -32,33 +34,28 @@ typedef struct
     Rect output_size;
     int *out_width_levels;
     int *out_height_levels;
-    Image *out;
-    Image *out_mask;
+    ImageF *out;
+    ImageF *out_mask;
+    ImageS *final_out;
     Image result;
-    Image *img_laplacians;
-    Image *mask_gaussian;
+    ImageS *img_laplacians;
+    ImageS *mask_gaussian;
 } Blender;
-
-Blender *create_blender(Rect out_size, int nb);
-int feed(Blender *b, Image *img, Image *maskImg, Point tl);
-void blend(Blender *b);
-void destroy_blender(Blender *blender);
-
-
 
 typedef struct
 {
+    float upsample_factor;
     int new_width;
     int new_height;
-    const Image *img;
-    unsigned char *sampled;
+    void *img;
+    void *sampled;
+    ImageType image_type;
 } SamplingThreadData;
 
 typedef struct
 {
-    unsigned char *original_data;
-    unsigned char *upsampled_data;
-    unsigned char *laplacian_data;
+    ImageS *original;
+    ImageS *upsampled;
     int total_size;
 } LaplacianThreadData;
 
@@ -73,25 +70,35 @@ typedef struct
     int level_width;
     int level_height;
     int level;
-    Image *img_laplacians;
-    Image *mask_gaussian;
-    Image *out;
-    Image *out_mask;
+    ImageS *img_laplacians;
+    ImageS *mask_gaussian;
+    ImageF *out;
+    ImageF *out_mask;
 } FeedThreadData;
 
 typedef struct
 {
+    int output_width;
+    int level;
+    ImageF *out;
+    ImageF *out_mask;
+    ImageS *final_out;
+} NormalThreadData;
+
+typedef struct
+{
     int out_size;
-    Image blended_image;
-    Image out_level;
+    ImageS blended_image;
+    ImageS out_level;
 } BlendThreadData;
 
-typedef union 
+typedef union
 {
     SamplingThreadData *std;
     LaplacianThreadData *ltd;
     FeedThreadData *ftd;
     BlendThreadData *btd;
+    NormalThreadData *ntd;
 } WorkerThreadArgs;
 
 typedef struct
@@ -107,13 +114,21 @@ typedef struct
     WorkerThreadArgs *workerThreadArgs;
 } ThreadArgs;
 
-
+Blender *create_blender(Rect out_size, int nb);
+int feed(Blender *b, Image *img, Image *maskImg, Point tl);
+void blend(Blender *b);
+void destroy_blender(Blender *blender);
 Image create_image(const char *filename);
+Image create_empty_image(int width, int height, int channels);
+ImageS create_empty_image_s(int width, int height, int channels);
+ImageF create_empty_image_f(int width, int height, int channels);
 Image create_image_mask(int width, int height, float range, int left, int right);
 int save_image(const Image *img, char *out_filename);
 int image_size(Image *img);
 void destroy_image(Image *img);
-Image upsample(const Image *img);
-Image downsample(const Image *img);
+void destroy_image_s(ImageS *img);
+Image upsample( Image *img,float upsample_factor);
+Image downsample( Image *img);
+ImageS downsample_s( ImageS *img);
 void crop_image(Image *img, int cut_top, int cut_bottom, int cut_left, int cut_right);
 void parallel_operator(OperatorType operatorType, ParallelOperatorArgs *arg);
