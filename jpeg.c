@@ -342,6 +342,12 @@ void crop_image_buf(Image *img, int cut_top, int cut_bottom, int cut_left, int c
         return;
     }
 
+    if (new_width == img->width && new_height == img->height)
+    {
+        return;
+    }
+    
+
     unsigned char *cropped = (unsigned char *)malloc(new_width * new_height * channels);
 
     if (!cropped)

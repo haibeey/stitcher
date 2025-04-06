@@ -32,6 +32,7 @@ typedef struct
 {
     int num_bands;
     Rect output_size;
+    Rect real_out_size;
     int *out_width_levels;
     int *out_height_levels;
     ImageF *out;
