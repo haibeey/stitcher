@@ -107,7 +107,9 @@ Point br(Rect r)
 
 Blender *create_blender(Rect out_size, int nb)
 {
+
     Blender *blender = (Blender *)malloc(sizeof(Blender));
+    blender->real_out_size = out_size;
     if (!blender)
         return NULL;
 
@@ -206,7 +208,7 @@ void destroy_blender(Blender *blender)
         {                                                                              \
             for (int x = 0; x < data->new_width; ++x)                                  \
             {                                                                          \
-                for (int c = 0; c < img->channels; ++c)                                \
+                for (char c = 0; c < img->channels; ++c)                               \
                 {                                                                      \
                     float sum = 0.0;                                                   \
                     for (int i = -2; i < 3; i++)                                       \
@@ -280,7 +282,7 @@ DEFINE_DOWNSAMPLE_FUNC(downsample_f, ImageF, float, IMAGEF)
         {                                                                                           \
             for (int x = 0; x < s->new_width; ++x)                                                  \
             {                                                                                       \
-                for (int c = 0; c < img->channels; ++c)                                             \
+                for (char c = 0; c < img->channels; ++c)                                            \
                 {                                                                                   \
                     float sum = 0;                                                                  \
                     for (int ki = 0; ki < 5; ki++)                                                  \
@@ -386,7 +388,7 @@ void *feed_worker(void *args)
             int maskIndex = i + (k * f->level_width);
             int outMaskLevelIndex = ((i + f->x_tl) + ((k + f->y_tl) * f->out_level_width));
 
-            for (int z = 0; z < CHANNELS; ++z)
+            for (char z = 0; z < CHANNELS; ++z)
             {
                 int imgIndex = ((i + (k * f->level_width)) * CHANNELS) + z;
 
@@ -581,7 +583,7 @@ void *normalize_worker(void *args)
             {
                 float w = n->out_mask[n->level].data[maskIndex];
 
-                for (int z = 0; z < CHANNELS; z++)
+                for (char z = 0; z < CHANNELS; z++)
                 {
                     int imgIndex = (x + (y * n->output_width)) * CHANNELS + z;
                     if (imgIndex < image_size_s(&n->final_out[n->level]))
@@ -609,7 +611,10 @@ void blend(Blender *b)
 
         parallel_operator(NORMALIZE, &args);
         destroy_image_f(&b->out[level]);
-        destroy_image_f(&b->out_mask[level]);
+        if (level > 0)
+        {
+            destroy_image_f(&b->out_mask[level]);
+        }
     }
 
     ImageS blended_image = b->final_out[b->num_bands];
@@ -632,6 +637,30 @@ void blend(Blender *b)
     b->result.height = blended_image.height;
 
     convert_images_to_image(&blended_image, &b->result);
+
+    for (size_t i = 0; i < b->result.height; i++)
+    {
+        for (size_t j = 0; j < b->result.width; j++)
+        {
+            int pos = j + (i * b->result.width);
+            float w = b->out_mask[0].data[pos];
+            if (w <= WEIGHT_EPS)
+            {
+                int imgPos = (j + (i * b->result.width)) * CHANNELS;
+                for (char c = 0; c < CHANNELS; c++)
+                {
+                    b->result.data[imgPos + c] = 0;
+                }
+            }
+        }
+    }
+
+    crop_image_buf(&b->result,
+                   0,
+                   max(0, b->result.height - b->real_out_size.height),
+                   0,
+                   max(0, b->result.width - b->real_out_size.width),
+                   CHANNELS);
     free(blended_image.data);
 }
 
