@@ -25,7 +25,7 @@ int main()
 
     Image *img = &img_buf1;
     char buf[100];
-    
+
     for (int i = 0; i < 3; i++)
     {
         Image down = downsample(img);
@@ -53,8 +53,8 @@ int main()
         img->width = up.width;
         img->height = up.height;
     }
-    
-    
+
+
 
     destroy_image(&img_buf1);
     destroy_image(&down);

@@ -3,7 +3,7 @@
 #include <time.h>
 #include <string.h>
 #include <stdlib.h>
-#include "laplace_blending.h"
+#include "image_operations.h"
 #include "utils.h"
 
 void test_sampling_operations()
