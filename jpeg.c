@@ -9,7 +9,7 @@
 Image decompress_jpeg(const char *filename)
 {
     Image result;
-    result.channels = CHANNELS;
+    result.channels = RGB_CHANNELS;
     tjhandle handle = tjInitDecompress();
     if (!handle)
     {
@@ -346,7 +346,7 @@ void crop_image_buf(Image *img, int cut_top, int cut_bottom, int cut_left, int c
     {
         return;
     }
-    
+
 
     unsigned char *cropped = (unsigned char *)malloc(new_width * new_height * channels);
 
@@ -382,4 +382,3 @@ IMAGE_CONVERT_FUNC(convert_image_to_image_f, Image, ImageF, float)
 IMAGE_CONVERT_FUNC(convert_image_to_image_s, Image, ImageS, short)
 IMAGE_CONVERT_FUNC(convert_imagef_to_image, ImageF, Image, unsigned char)
 IMAGE_CONVERT_FUNC(convert_images_to_image, ImageS, Image, unsigned char)
-

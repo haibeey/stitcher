@@ -48,7 +48,7 @@ int max(int a, int b)
 
 int reflect_index(int i,int n){
     if (i < 0)
-        return  -i;
+        return  -i % n;
     else if (i >= n)
         return 2 * n - i - 2;
     else

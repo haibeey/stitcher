@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e 
+set -e
 BUILD_DIR_LIB_TURBOJPEG=$PWD/builds/libturbojpeg
 INSTALL_DIR_LIB_TURBOJPEG=$PWD/installs/libturbojpeg
 BUILD_DIR_LIB_NATIVE_STITCHER=$PWD/builds/native-stitcher
@@ -34,6 +34,7 @@ build_macos() {
       -DCMAKE_SYSTEM_PROCESSOR=$ARCH \
       -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" \
       -DCMAKE_C_COMPILER=$(xcrun --sdk macosx --find clang) \
+      -DCMAKE_OSX_SYSROOT=$(xcrun --sdk macosx --show-sdk-path) \
       -DCMAKE_C_FLAGS="$TARGET_FLAG"
 
     make -j$(sysctl -n hw.logicalcpu)
@@ -52,10 +53,12 @@ build_macos() {
         -DCMAKE_SYSTEM_PROCESSOR=$ARCH \
         -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" \
         -DCMAKE_C_COMPILER=$(xcrun --sdk macosx --find clang) \
+        -DCMAKE_OSX_ARCHITECTURES=$ARCH \
+        -DCMAKE_OSX_SYSROOT=$(xcrun --sdk macosx --show-sdk-path) \
         -DCMAKE_C_FLAGS="$TARGET_FLAG"
       make -j$(sysctl -n hw.logicalcpu)
       make install
-    popd    
+    popd
   done
 }
 
@@ -65,7 +68,7 @@ build_android() {
     BUILD_DIR="$BUILD_DIR_LIB_TURBOJPEG/andriod/$ARCH"
     INSTALL_DIR="$INSTALL_DIR_LIB_TURBOJPEG/andriod/$ARCH"
     mkdir -p "$BUILD_DIR"
-    
+
 
     if [ "$ARCH" == "arm64-v8a" ]; then
       TARGET_FLAG="-target aarch64-linux-android21"
@@ -120,7 +123,7 @@ build_android() {
         -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" \
         -DCMAKE_C_COMPILER=$ANDROID_NDK/toolchains/llvm/prebuilt/darwin-x86_64/bin/clang \
         -DCMAKE_C_FLAGS="$TARGET_FLAG" \
-        -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK/build/cmake/android.toolchain.cmake 
+        -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK/build/cmake/android.toolchain.cmake
       make -j$(sysctl -n hw.logicalcpu)
       make install
     popd
@@ -148,7 +151,7 @@ build_ios() {
         -DCMAKE_OSX_SYSROOT=${IOS_SYSROOT[0]} \
         -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" \
         -DCMAKE_C_COMPILER=$(xcrun --sdk iphoneos --find clang) \
-        -DCMAKE_C_FLAGS="$TARGET_FLAG" 
+        -DCMAKE_C_FLAGS="$TARGET_FLAG"
 
       make -j$(sysctl -n hw.logicalcpu)
       make install
@@ -167,7 +170,7 @@ build_ios() {
         -DCMAKE_OSX_SYSROOT=${IOS_SYSROOT[0]} \
         -DCMAKE_C_FLAGS="-target arm64-apple-ios12.0" \
         -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" \
-        -DCMAKE_C_COMPILER=$(xcrun --sdk iphoneos --find clang) 
+        -DCMAKE_C_COMPILER=$(xcrun --sdk iphoneos --find clang)
       make -j$(sysctl -n hw.logicalcpu)
       make install
     popd
@@ -193,7 +196,7 @@ build_ios_sim() {
           -DCMAKE_OSX_SYSROOT=${IOS_SYSROOT[0]} \
           -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" \
           -DCMAKE_C_COMPILER=$(xcrun --sdk iphoneos --find clang) \
-          -DCMAKE_C_FLAGS="$TARGET_FLAG" 
+          -DCMAKE_C_FLAGS="$TARGET_FLAG"
 
         make -j$(sysctl -n hw.logicalcpu)
         make install
@@ -212,7 +215,7 @@ build_ios_sim() {
           -DCMAKE_OSX_SYSROOT=${IOS_SYSROOT[0]} \
           -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" \
           -DCMAKE_C_FLAGS="-target $ARCH-apple-ios14.0-simulator" \
-          -DCMAKE_C_COMPILER=$(xcrun --sdk iphonesimulator --find clang) 
+          -DCMAKE_C_COMPILER=$(xcrun --sdk iphonesimulator --find clang)
         make -j$(sysctl -n hw.logicalcpu)
         make install
       popd
@@ -269,7 +272,7 @@ case "$1" in
             ;;
         ios-sim)
             build_ios_sim
-            ;;              
+            ;;
         *)
         help
         ;;
