@@ -22,7 +22,7 @@ link_directories(${LIBJPEG_TURBO_LIB_DIR})
 
 add_library(${PROJECT_NAME} SHARED
     image_operations.c
-    laplace_blending.c
+    blending.c
     jpeg.c
     utils.c
 )
@@ -40,7 +40,7 @@ install(DIRECTORY ${LIBJPEG_TURBO_INCLUDE_DIR}/
         DESTINATION include)
 
 install(FILES image_operations.h
-              laplace_blending.h
+              blending.h
               utils.h
               jpeg.h
         DESTINATION include)

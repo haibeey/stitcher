@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <time.h>
 #include <string.h>
-#include "laplace_blending.h"
+#include "blending.h"
 #include "utils.h"
 #include <stdlib.h>
 

@@ -3,7 +3,7 @@
 #include <stdio.h>
 #include <time.h>
 #include <string.h>
-#include "laplace_blending.h"
+#include "blending.h"
 #include "utils.h"
 
 // naive testing
@@ -24,7 +24,7 @@ int main()
     int num_bands = 5;
 
     clock_gettime(CLOCK_MONOTONIC, &start);
-    Blender *b = create_blender(out_size, num_bands);
+    Blender *b = create_blender(MULTIBAND,out_size, num_bands);
     clock_gettime(CLOCK_MONOTONIC, &end);
     duration = (end.tv_sec - start.tv_sec) + (end.tv_nsec - start.tv_nsec) / 1e9;
     printf("Elapsed time for creating blended: %.2f seconds\n", duration);

@@ -1,5 +1,10 @@
 #include "image_operations.h"
 
+typedef enum{
+    MULTIBAND,
+    FEATHER
+} BlenderType;
+
 typedef struct
 {
     int num_bands;
@@ -13,9 +18,11 @@ typedef struct
     Image result;
     ImageS *img_laplacians;
     ImageS *mask_gaussian;
+    BlenderType blender_type;
+    float sharpness;
 } Blender;
 
-Blender *create_blender(Rect out_size, int nb);
+Blender *create_blender(BlenderType blender_type, Rect out_size, int nb);
 int feed(Blender *b, Image *img, Image *maskImg, Point tl);
 void blend(Blender *b);
 void destroy_blender(Blender *blender);

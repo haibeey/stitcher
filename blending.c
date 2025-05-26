@@ -6,15 +6,16 @@
 #include <string.h>
 #include <time.h>
 
-#include "laplace_blending.h"
+#include "blending.h"
 #include "utils.h"
 
-Blender *create_blender(Rect out_size, int nb) {
+Blender *create_multi_band_blender(Rect out_size, int nb) {
 
   Blender *blender = (Blender *)malloc(sizeof(Blender));
-  blender->real_out_size = out_size;
+  blender->blender_type = MULTIBAND;
   if (!blender)
     return NULL;
+  blender->real_out_size = out_size;
 
   blender->num_bands = min(MAX_BANDS, nb);
 
@@ -77,6 +78,23 @@ Blender *create_blender(Rect out_size, int nb) {
   }
 
   return blender;
+}
+
+Blender *create_feather_blender(Rect out_size) {
+  Blender *blender = (Blender *)malloc(sizeof(Blender));
+  blender->blender_type = FEATHER;
+  if (!blender)
+    return NULL;
+  blender->real_out_size = out_size;
+  blender->sharpness = 2.5;
+  return blender;
+}
+
+Blender *create_blender(BlenderType blenderType, Rect out_size, int nb) {
+  if (blenderType == MULTIBAND) {
+    return create_multi_band_blender(out_size, nb);
+  }
+  return create_feather_blender(out_size);
 }
 
 void destroy_blender(Blender *blender) {
@@ -148,7 +166,8 @@ void *feed_worker(void *args) {
                             f->mask_gaussian[f->level].height) {
 
           int outLevelIndex =
-              ((i + f->x_tl) + (k + f->y_tl) * f->out_level_width) * RGB_CHANNELS +
+              ((i + f->x_tl) + (k + f->y_tl) * f->out_level_width) *
+                  RGB_CHANNELS +
               z;
 
           float maskVal = f->mask_gaussian[f->level].data[maskIndex];
@@ -175,7 +194,7 @@ void *feed_worker(void *args) {
   return NULL;
 }
 
-int feed(Blender *b, Image *img, Image *mask_img, Point tl) {
+int multi_band_feed(Blender *b, Image *img, Image *mask_img, Point tl) {
   ImageS images[b->num_bands + 1];
   int return_val = 1;
 
@@ -218,7 +237,8 @@ int feed(Blender *b, Image *img, Image *mask_img, Point tl) {
   int bottom = br_new.y - tl.y - img->height;
   int right = br_new.x - tl.x - img->width;
 
-  add_border_to_image(img, top, bottom, left, right, RGB_CHANNELS, BORDER_REFLECT);
+  add_border_to_image(img, top, bottom, left, right, RGB_CHANNELS,
+                      BORDER_REFLECT);
   add_border_to_image(mask_img, top, bottom, left, right, 1, BORDER_CONSTANT);
 
   images[0] = create_empty_image_s(img->width, img->height, img->channels);
@@ -300,6 +320,20 @@ clean:
   return return_val;
 }
 
+int feather_feed(Blender *b, Image *img, Image *mask_img, Point tl) {
+
+  return -1;
+}
+
+int feed(Blender *b, Image *img, Image *mask_img, Point tl) {
+
+  if (b->blender_type == MULTIBAND) {
+    return multi_band_feed(b, img, mask_img, tl);
+  } else {
+    return feather_feed(b, img, mask_img, tl);
+  }
+}
+
 void *blend_worker(void *args) {
   ThreadArgs *arg = (ThreadArgs *)args;
   int start_row = arg->start_index;
@@ -340,7 +374,7 @@ void *normalize_worker(void *args) {
   return NULL;
 }
 
-void blend(Blender *b) {
+void multi_band_blend(Blender *b) {
   for (int level = 0; level <= b->num_bands; ++level) {
     b->final_out[level] = create_empty_image_s(
         b->out[level].width, b->out[level].height, b->out[level].channels);
@@ -393,10 +427,20 @@ void blend(Blender *b) {
     }
   }
 
-  crop_image_buf(&b->result, 0,
-                 max(0, b->result.height - b->real_out_size.height), 0,
-                 max(0, b->result.width - b->real_out_size.width), RGB_CHANNELS);
+  crop_image_buf(
+      &b->result, 0, max(0, b->result.height - b->real_out_size.height), 0,
+      max(0, b->result.width - b->real_out_size.width), RGB_CHANNELS);
   free(blended_image.data);
+}
+
+void feather_blend(Blender *b) {}
+
+void blend(Blender *b) {
+  if (b->blender_type == MULTIBAND) {
+    multi_band_blend(b);
+  } else {
+    feather_blend(b);
+  }
 }
 
 void parallel_operator(OperatorType operatorType, ParallelOperatorArgs *arg) {
