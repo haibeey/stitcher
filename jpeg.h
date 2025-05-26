@@ -1,6 +1,7 @@
 #ifndef IMAGE_HEADERS
 #define IMAGE_HEADERS
-#define CHANNELS 3
+#define RGB_CHANNELS 3
+#define GRAY_CHANNELS 1
 
 typedef enum {
     BORDER_CONSTANT,

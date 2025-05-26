@@ -27,7 +27,7 @@ To verify the functionality of **NativeSticher**, follow the instructions below 
 ### 1. Testing with libturbojpeg (Direct Compilation)
 If you have `libturbojpeg` installed, compile and run the test with the following command:
 ```bash
-gcc-14 -pthread -fsanitize=address -g -o stitch \
+gcc-14 -O3 -mavx2 -mfma -I simde/ -pthread -fsanitize=address -g -o stitch \
 -I../ -I/usr/local/include \
 -L/usr/local/lib -lturbojpeg \
 stitch.c ../laplace_blending.c ../jpeg.c ../image_operations.c ../utils.c && time ./stitch

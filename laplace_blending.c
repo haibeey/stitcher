@@ -139,16 +139,16 @@ void *feed_worker(void *args) {
       int outMaskLevelIndex =
           ((i + f->x_tl) + ((k + f->y_tl) * f->out_level_width));
 
-      for (char z = 0; z < CHANNELS; ++z) {
-        int imgIndex = ((i + (k * f->level_width)) * CHANNELS) + z;
+      for (char z = 0; z < RGB_CHANNELS; ++z) {
+        int imgIndex = ((i + (k * f->level_width)) * RGB_CHANNELS) + z;
 
         if (imgIndex < f->img_laplacians[f->level].width *
-                           f->img_laplacians[f->level].height * CHANNELS &&
+                           f->img_laplacians[f->level].height * RGB_CHANNELS &&
             maskIndex < f->mask_gaussian[f->level].width *
                             f->mask_gaussian[f->level].height) {
 
           int outLevelIndex =
-              ((i + f->x_tl) + (k + f->y_tl) * f->out_level_width) * CHANNELS +
+              ((i + f->x_tl) + (k + f->y_tl) * f->out_level_width) * RGB_CHANNELS +
               z;
 
           float maskVal = f->mask_gaussian[f->level].data[maskIndex];
@@ -159,7 +159,7 @@ void *feed_worker(void *args) {
           imgVal = imgVal * maskVal;
 
           if (outLevelIndex <
-                  f->out_level_height * f->out_level_width * CHANNELS &&
+                  f->out_level_height * f->out_level_width * RGB_CHANNELS &&
               outMaskLevelIndex < f->out_level_height * f->out_level_width) {
             f->out[f->level].data[outLevelIndex] += imgVal;
 
@@ -218,7 +218,7 @@ int feed(Blender *b, Image *img, Image *mask_img, Point tl) {
   int bottom = br_new.y - tl.y - img->height;
   int right = br_new.x - tl.x - img->width;
 
-  add_border_to_image(img, top, bottom, left, right, CHANNELS, BORDER_REFLECT);
+  add_border_to_image(img, top, bottom, left, right, RGB_CHANNELS, BORDER_REFLECT);
   add_border_to_image(mask_img, top, bottom, left, right, 1, BORDER_CONSTANT);
 
   images[0] = create_empty_image_s(img->width, img->height, img->channels);
@@ -326,8 +326,8 @@ void *normalize_worker(void *args) {
       if (maskIndex < image_size_f(&n->out_mask[n->level])) {
         float w = n->out_mask[n->level].data[maskIndex];
 
-        for (char z = 0; z < CHANNELS; z++) {
-          int imgIndex = (x + (y * n->output_width)) * CHANNELS + z;
+        for (char z = 0; z < RGB_CHANNELS; z++) {
+          int imgIndex = (x + (y * n->output_width)) * RGB_CHANNELS + z;
           if (imgIndex < image_size_s(&n->final_out[n->level])) {
 
             n->final_out[n->level].data[imgIndex] =
@@ -373,7 +373,7 @@ void blend(Blender *b) {
 
   b->result.data =
       (unsigned char *)malloc(b->output_size.width * b->output_size.height *
-                              CHANNELS * sizeof(unsigned char));
+                              RGB_CHANNELS * sizeof(unsigned char));
   b->result.channels = blended_image.channels;
   b->result.width = blended_image.width;
   b->result.height = blended_image.height;
@@ -385,8 +385,8 @@ void blend(Blender *b) {
       int pos = j + (i * b->result.width);
       float w = b->out_mask[0].data[pos];
       if (w <= WEIGHT_EPS) {
-        int imgPos = (j + (i * b->result.width)) * CHANNELS;
-        for (char c = 0; c < CHANNELS; c++) {
+        int imgPos = (j + (i * b->result.width)) * RGB_CHANNELS;
+        for (char c = 0; c < RGB_CHANNELS; c++) {
           b->result.data[imgPos + c] = 0;
         }
       }
@@ -395,7 +395,7 @@ void blend(Blender *b) {
 
   crop_image_buf(&b->result, 0,
                  max(0, b->result.height - b->real_out_size.height), 0,
-                 max(0, b->result.width - b->real_out_size.width), CHANNELS);
+                 max(0, b->result.width - b->real_out_size.width), RGB_CHANNELS);
   free(blended_image.data);
 }
 
