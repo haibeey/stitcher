@@ -7,16 +7,15 @@
 
 int get_cpus_count()
 {
-// #if defined(_WIN32) || defined(_WIN64)
-//     SYSTEM_INFO sysinfo;
-//     GetSystemInfo(&sysinfo);
-//     return sysinfo.dwNumberOfProcessors;
-// #elif defined(_SC_NPROCESSORS_ONLN)
-//     return (int)sysconf(_SC_NPROCESSORS_ONLN);
-// #else
-//     return 1;
-// #endif
-return 1;
+#if defined(_WIN32) || defined(_WIN64)
+    SYSTEM_INFO sysinfo;
+    GetSystemInfo(&sysinfo);
+    return sysinfo.dwNumberOfProcessors;
+#elif defined(_SC_NPROCESSORS_ONLN)
+    return (int)sysconf(_SC_NPROCESSORS_ONLN);
+#else
+    return 1;
+#endif
 }
 
 int clamp(int value, int min, int max)
