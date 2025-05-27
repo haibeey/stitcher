@@ -121,6 +121,8 @@ typedef struct
 
 Image create_image(const char *filename);
 
+void distance_transform(Image *mask);
+
 Image create_empty_image(int width, int height, int channels);
 ImageS create_empty_image_s(int width, int height, int channels);
 ImageF create_empty_image_f(int width, int height, int channels);

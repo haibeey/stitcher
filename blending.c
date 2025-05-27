@@ -1,4 +1,8 @@
+#include "blending.h"
+#include "jpeg.h"
 #include "turbojpeg.h"
+#include "utils.h"
+#include <assert.h>
 #include <math.h>
 #include <pthread.h>
 #include <stdio.h>
@@ -6,15 +10,13 @@
 #include <string.h>
 #include <time.h>
 
-#include "laplace_blending.h"
-#include "utils.h"
-
-Blender *create_blender(Rect out_size, int nb) {
+Blender *create_multi_band_blender(Rect out_size, int nb) {
 
   Blender *blender = (Blender *)malloc(sizeof(Blender));
-  blender->real_out_size = out_size;
+  blender->blender_type = MULTIBAND;
   if (!blender)
     return NULL;
+  blender->real_out_size = out_size;
 
   blender->num_bands = min(MAX_BANDS, nb);
 
@@ -77,6 +79,41 @@ Blender *create_blender(Rect out_size, int nb) {
   }
 
   return blender;
+}
+
+Blender *create_feather_blender(Rect out_size) {
+  Blender *blender = (Blender *)malloc(sizeof(Blender));
+  blender->blender_type = FEATHER;
+  if (!blender)
+    return NULL;
+  blender->real_out_size = out_size;
+  blender->output_size = out_size;
+  blender->sharpness = 2.5;
+
+  blender->out = (ImageF *)malloc(sizeof(ImageF));
+  blender->final_out = (ImageS *)malloc(sizeof(ImageS));
+  blender->out_mask = (ImageF *)malloc(sizeof(ImageF));
+
+  if (!blender->out || !blender->final_out || !blender->out_mask) {
+    free(blender->out);
+    free(blender->final_out);
+    free(blender->out_mask);
+    free(blender);
+    return NULL;
+  }
+
+  blender->out[0] = create_empty_image_f(out_size.width, out_size.height, 3);
+  blender->out_mask[0] =
+      create_empty_image_f(out_size.width, out_size.height, 1);
+
+  return blender;
+}
+
+Blender *create_blender(BlenderType blenderType, Rect out_size, int nb) {
+  if (blenderType == MULTIBAND) {
+    return create_multi_band_blender(out_size, nb);
+  }
+  return create_feather_blender(out_size);
 }
 
 void destroy_blender(Blender *blender) {
@@ -148,7 +185,8 @@ void *feed_worker(void *args) {
                             f->mask_gaussian[f->level].height) {
 
           int outLevelIndex =
-              ((i + f->x_tl) + (k + f->y_tl) * f->out_level_width) * RGB_CHANNELS +
+              ((i + f->x_tl) + (k + f->y_tl) * f->out_level_width) *
+                  RGB_CHANNELS +
               z;
 
           float maskVal = f->mask_gaussian[f->level].data[maskIndex];
@@ -175,7 +213,7 @@ void *feed_worker(void *args) {
   return NULL;
 }
 
-int feed(Blender *b, Image *img, Image *mask_img, Point tl) {
+int multi_band_feed(Blender *b, Image *img, Image *mask_img, Point tl) {
   ImageS images[b->num_bands + 1];
   int return_val = 1;
 
@@ -218,7 +256,8 @@ int feed(Blender *b, Image *img, Image *mask_img, Point tl) {
   int bottom = br_new.y - tl.y - img->height;
   int right = br_new.x - tl.x - img->width;
 
-  add_border_to_image(img, top, bottom, left, right, RGB_CHANNELS, BORDER_REFLECT);
+  add_border_to_image(img, top, bottom, left, right, RGB_CHANNELS,
+                      BORDER_REFLECT);
   add_border_to_image(mask_img, top, bottom, left, right, 1, BORDER_CONSTANT);
 
   images[0] = create_empty_image_s(img->width, img->height, img->channels);
@@ -300,6 +339,36 @@ clean:
   return return_val;
 }
 
+int feather_feed(Blender *b, Image *img, Image *mask_img, Point tl) {
+  distance_transform(mask_img);
+
+  for (int y = 0; y < img->height; y++) {
+    for (int x = 0; x < img->width; x++) {
+      int image_pos = ((y * img->width ) + x) * RGB_CHANNELS;
+      int mask_pos = (y * img->width) + x;
+      int result_pos =
+          ((x + tl.x) + ((y + tl.y) * b->output_size.width)) * RGB_CHANNELS;
+      int result_mask_pos = ((x + tl.x) + ((y + tl.y) * b->output_size.width));
+      float w = mask_img->data[mask_pos] / 256.0;
+      b->out_mask->data[result_mask_pos] += w;
+      for (int z = 0; z < RGB_CHANNELS; z++) {
+        b->out->data[result_pos + z] += img->data[image_pos + z] * w;
+      }
+    }
+  }
+
+  return 1;
+}
+
+int feed(Blender *b, Image *img, Image *mask_img, Point tl) {
+  assert(img->height == mask_img->height && img->width == mask_img->width);
+  if (b->blender_type == MULTIBAND) {
+    return multi_band_feed(b, img, mask_img, tl);
+  } else {
+    return feather_feed(b, img, mask_img, tl);
+  }
+}
+
 void *blend_worker(void *args) {
   ThreadArgs *arg = (ThreadArgs *)args;
   int start_row = arg->start_index;
@@ -340,7 +409,7 @@ void *normalize_worker(void *args) {
   return NULL;
 }
 
-void blend(Blender *b) {
+void multi_band_blend(Blender *b) {
   for (int level = 0; level <= b->num_bands; ++level) {
     b->final_out[level] = create_empty_image_s(
         b->out[level].width, b->out[level].height, b->out[level].channels);
@@ -393,10 +462,43 @@ void blend(Blender *b) {
     }
   }
 
-  crop_image_buf(&b->result, 0,
-                 max(0, b->result.height - b->real_out_size.height), 0,
-                 max(0, b->result.width - b->real_out_size.width), RGB_CHANNELS);
+  crop_image_buf(
+      &b->result, 0, max(0, b->result.height - b->real_out_size.height), 0,
+      max(0, b->result.width - b->real_out_size.width), RGB_CHANNELS);
   free(blended_image.data);
+}
+
+void feather_blend(Blender *b) {
+  b->final_out[0] = create_empty_image_s(b->out[0].width, b->out[0].height,
+                                         b->out[0].channels);
+
+  NormalThreadData ntd = {b->out[0].width, 0, b->out, b->out_mask,
+                          b->final_out};
+  WorkerThreadArgs wtd;
+  wtd.ntd = &ntd;
+  ParallelOperatorArgs args = {b->out[0].height, &wtd};
+
+  parallel_operator(NORMALIZE, &args);
+  destroy_image_f(&b->out[0]);
+
+  b->result.data =
+      (unsigned char *)malloc(b->output_size.width * b->output_size.height *
+                              RGB_CHANNELS * sizeof(unsigned char));
+
+  b->result.channels = RGB_CHANNELS;
+  b->result.width = b->output_size.width;
+  b->result.height = b->output_size.height;
+
+  convert_images_to_image(&b->final_out[0], &b->result);
+  destroy_image_s(&b->final_out[0]);
+}
+
+void blend(Blender *b) {
+  if (b->blender_type == MULTIBAND) {
+    multi_band_blend(b);
+  } else {
+    feather_blend(b);
+  }
 }
 
 void parallel_operator(OperatorType operatorType, ParallelOperatorArgs *arg) {
