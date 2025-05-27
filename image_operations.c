@@ -2,6 +2,9 @@
 #include "image_operations.h"
 #include "jpeg.h"
 #include "simde/simde/x86/avx2.h"
+#include <assert.h>
+#include <float.h>
+#include <math.h>
 #include <stdio.h>
 
 Image create_image(const char *filename) { return decompress_jpeg(filename); }
@@ -389,11 +392,11 @@ void char_convolve_1(int range_start, int range_end, int src_width,
     if (data->image_type == IMAGE) {                                           \
       switch (img->channels) {                                                 \
       case GRAY_CHANNELS:                                                      \
-        char_convolve_1(start_row, end_row, img->width, img->height,            \
+        char_convolve_1(start_row, end_row, img->width, img->height,           \
                         (unsigned char *)img->data, (unsigned char *)sampled); \
         break;                                                                 \
       case RGB_CHANNELS:                                                       \
-        char_convolve_3(start_row, end_row, img->width, img->height,            \
+        char_convolve_3(start_row, end_row, img->width, img->height,           \
                         (unsigned char *)img->data, (unsigned char *)sampled); \
         break;                                                                 \
       default:                                                                 \
@@ -529,3 +532,96 @@ DEFINE_UPSAMPLE_WORKER_FUNC(upsample_worker_f, ImageF, float)
 DEFINE_UPSAMPLE_FUNC(upsample, Image, unsigned char, IMAGE)
 DEFINE_UPSAMPLE_FUNC(upsample_image_s, ImageS, short, IMAGES)
 DEFINE_UPSAMPLE_FUNC(upsample_image_f, ImageF, float, IMAGES)
+
+float get_pixel(float *image, int x, int y, int width, int height) {
+  if (x < 0 || y < 0 || x >= width || y >= height)
+    return FLT_MAX;
+  return image[y * width + x];
+}
+
+void distance_transform(Image *mask) {
+  assert(mask->channels == GRAY_CHANNELS);
+  const float mask5[] = {1.0f, 1.4f};
+
+  int x, y;
+  ImageF dst = create_empty_image_f(mask->width, mask->height, mask->channels);
+
+  for (int y = 0; y < mask->height; y++) {
+    for (int x = 0; x < mask->width; x++) {
+      dst.data[y * mask->width + x] =
+          mask->data[y * mask->width + x] > 0 ? 0.0f : 255.0f;
+    }
+  }
+
+float max = -1.0f;
+  for (y = 0; y < mask->height; y++) {
+    for (x = 0; x < mask->width; x++) {
+      float current = dst.data[y * mask->width + x];
+      if (current == 0.0f)
+        continue;
+
+      float min_val = current;
+
+      min_val = fminf(min_val,
+                      get_pixel(dst.data, x - 1, y, mask->width, mask->height) +
+                          mask5[0]);
+      min_val = fminf(min_val,
+                      get_pixel(dst.data, x, y - 1, mask->width, mask->height) +
+                          mask5[0]);
+      min_val = fminf(min_val, get_pixel(dst.data, x - 1, y - 1, mask->width,
+                                         mask->height) +
+                                   mask5[1]);
+      min_val = fminf(min_val, get_pixel(dst.data, x + 1, y - 1, mask->width,
+                                         mask->height) +
+                                   mask5[1]);
+      min_val = fminf(min_val, get_pixel(dst.data, x - 2, y - 1, mask->width,
+                                         mask->height) +
+                                   mask5[0] + mask5[1]);
+      min_val = fminf(min_val, get_pixel(dst.data, x - 1, y - 2, mask->width,
+                                         mask->height) +
+                                   mask5[0] + mask5[1]);
+
+      dst.data[y * mask->width + x] = min_val;
+    }
+  }
+
+  for (y = mask->height - 1; y >= 0; y--) {
+    for (x = mask->width - 1; x >= 0; x--) {
+      float current = dst.data[y * mask->width + x];
+
+      float min_val = current;
+      min_val = fminf(min_val,
+                      get_pixel(dst.data, x + 1, y, mask->width, mask->height) +
+                          mask5[0]);
+      min_val = fminf(min_val,
+                      get_pixel(dst.data, x, y + 1, mask->width, mask->height) +
+                          mask5[0]);
+      min_val = fminf(min_val, get_pixel(dst.data, x + 1, y + 1, mask->width,
+                                         mask->height) +
+                                   mask5[1]);
+      min_val = fminf(min_val, get_pixel(dst.data, x - 1, y + 1, mask->width,
+                                         mask->height) +
+                                   mask5[1]);
+      min_val = fminf(min_val, get_pixel(dst.data, x + 2, y + 1, mask->width,
+                                         mask->height) +
+                                   mask5[0] + mask5[1]);
+      min_val = fminf(min_val, get_pixel(dst.data, x + 1, y + 2, mask->width,
+                                         mask->height) +
+                                   mask5[0] + mask5[1]);
+
+      dst.data[y * mask->width + x] = min_val;
+    }
+  }
+
+
+  for (int y = 0; y < mask->height; y++) {
+    for (int x = 0; x < mask->width; x++) {
+
+      mask->data[y * mask->width + x] = dst.data[y * mask->width + x] == 0.0f
+                                            ? mask->data[y * mask->width + x]
+                                            :  dst.data[y * mask->width + x];
+    }
+  }
+
+  destroy_image_f(&dst);
+}

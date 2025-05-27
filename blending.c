@@ -1,13 +1,14 @@
+#include "blending.h"
+#include "jpeg.h"
 #include "turbojpeg.h"
+#include "utils.h"
+#include <assert.h>
 #include <math.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-
-#include "blending.h"
-#include "utils.h"
 
 Blender *create_multi_band_blender(Rect out_size, int nb) {
 
@@ -86,7 +87,25 @@ Blender *create_feather_blender(Rect out_size) {
   if (!blender)
     return NULL;
   blender->real_out_size = out_size;
+  blender->output_size = out_size;
   blender->sharpness = 2.5;
+
+  blender->out = (ImageF *)malloc(sizeof(ImageF));
+  blender->final_out = (ImageS *)malloc(sizeof(ImageS));
+  blender->out_mask = (ImageF *)malloc(sizeof(ImageF));
+
+  if (!blender->out || !blender->final_out || !blender->out_mask) {
+    free(blender->out);
+    free(blender->final_out);
+    free(blender->out_mask);
+    free(blender);
+    return NULL;
+  }
+
+  blender->out[0] = create_empty_image_f(out_size.width, out_size.height, 3);
+  blender->out_mask[0] =
+      create_empty_image_f(out_size.width, out_size.height, 1);
+
   return blender;
 }
 
@@ -321,12 +340,28 @@ clean:
 }
 
 int feather_feed(Blender *b, Image *img, Image *mask_img, Point tl) {
+  distance_transform(mask_img);
 
-  return -1;
+  for (int y = 0; y < img->height; y++) {
+    for (int x = 0; x < img->width; x++) {
+      int image_pos = ((y * img->width ) + x) * RGB_CHANNELS;
+      int mask_pos = (y * img->width) + x;
+      int result_pos =
+          ((x + tl.x) + ((y + tl.y) * b->output_size.width)) * RGB_CHANNELS;
+      int result_mask_pos = ((x + tl.x) + ((y + tl.y) * b->output_size.width));
+      float w = mask_img->data[mask_pos] / 256.0;
+      b->out_mask->data[result_mask_pos] += w;
+      for (int z = 0; z < RGB_CHANNELS; z++) {
+        b->out->data[result_pos + z] += img->data[image_pos + z] * w;
+      }
+    }
+  }
+
+  return 1;
 }
 
 int feed(Blender *b, Image *img, Image *mask_img, Point tl) {
-
+  assert(img->height == mask_img->height && img->width == mask_img->width);
   if (b->blender_type == MULTIBAND) {
     return multi_band_feed(b, img, mask_img, tl);
   } else {
@@ -433,7 +468,30 @@ void multi_band_blend(Blender *b) {
   free(blended_image.data);
 }
 
-void feather_blend(Blender *b) {}
+void feather_blend(Blender *b) {
+  b->final_out[0] = create_empty_image_s(b->out[0].width, b->out[0].height,
+                                         b->out[0].channels);
+
+  NormalThreadData ntd = {b->out[0].width, 0, b->out, b->out_mask,
+                          b->final_out};
+  WorkerThreadArgs wtd;
+  wtd.ntd = &ntd;
+  ParallelOperatorArgs args = {b->out[0].height, &wtd};
+
+  parallel_operator(NORMALIZE, &args);
+  destroy_image_f(&b->out[0]);
+
+  b->result.data =
+      (unsigned char *)malloc(b->output_size.width * b->output_size.height *
+                              RGB_CHANNELS * sizeof(unsigned char));
+
+  b->result.channels = RGB_CHANNELS;
+  b->result.width = b->output_size.width;
+  b->result.height = b->output_size.height;
+
+  convert_images_to_image(&b->final_out[0], &b->result);
+  destroy_image_s(&b->final_out[0]);
+}
 
 void blend(Blender *b) {
   if (b->blender_type == MULTIBAND) {
