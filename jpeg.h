@@ -1,3 +1,8 @@
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+
 #ifndef IMAGE_HEADERS
 #define IMAGE_HEADERS
 #define RGB_CHANNELS 3
@@ -55,4 +60,8 @@ void convert_image_to_image_f(Image* in , ImageF *out);
 void convert_image_to_image_s(Image* in , ImageS *out);
 void convert_imagef_to_image(ImageF* in , Image *out);
 void convert_images_to_image(ImageS* in , Image *out);
+#endif
+
+#ifdef __cplusplus
+}
 #endif

@@ -1,3 +1,8 @@
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+
 #include "image_operations.h"
 
 typedef enum{
@@ -26,3 +31,8 @@ Blender *create_blender(BlenderType blender_type, Rect out_size, int nb);
 int feed(Blender *b, Image *img, Image *maskImg, Point tl);
 void blend(Blender *b);
 void destroy_blender(Blender *blender);
+
+
+#ifdef __cplusplus
+}
+#endif

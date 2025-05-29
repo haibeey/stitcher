@@ -1,3 +1,8 @@
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+
 #include "turbojpeg.h"
 #include <stdlib.h>
 #include <pthread.h>
@@ -156,3 +161,8 @@ ImageF downsample_f(ImageF *img);
 
 void crop_image(Image *img, int cut_top, int cut_bottom, int cut_left, int cut_right);
 void parallel_operator(OperatorType operatorType, ParallelOperatorArgs *arg);
+
+
+#ifdef __cplusplus
+}
+#endif
