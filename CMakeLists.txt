@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 2.8.12...3.28)
 
-project(NativeSticher LANGUAGES C)
+project(NativeStitcher LANGUAGES C)
 
 set(LIBJPEG_TURBO_ROOT      "${LIBJPEG_TURBO_ROOT}")
 set(LIBJPEG_TURBO_INCLUDE_DIR "${LIBJPEG_TURBO_ROOT}/include")
