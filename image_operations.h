@@ -133,7 +133,7 @@ ImageS create_empty_image_s(int width, int height, int channels);
 ImageF create_empty_image_f(int width, int height, int channels);
 
 Image create_image_mask(int width, int height, float range, int left, int right);
-int save_image(const Image *img, char *out_filename);
+int save_image(const Image *img, const char *out_filename);
 
 int image_size(Image *img);
 int image_size_s(ImageS *img);

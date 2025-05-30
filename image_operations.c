@@ -31,7 +31,7 @@ Image create_image_mask(int width, int height, float range, int left,
   return create_mask(width, height, range, left, right);
 }
 
-int save_image(const Image *img, char *out_filename) {
+int save_image(const Image *img, const char *out_filename) {
   if (img->channels == RGB_CHANNELS) {
     return compress_jpeg(out_filename, img, 100);
   } else {
