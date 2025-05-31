@@ -89,6 +89,11 @@ Blender *create_feather_blender(Rect out_size) {
   blender->real_out_size = out_size;
   blender->output_size = out_size;
   blender->sharpness = 2.5;
+  blender->out_width_levels = NULL;
+  blender->out_height_levels = NULL;
+  blender->final_out = NULL;
+  blender->img_laplacians = NULL;
+  blender->mask_gaussian = NULL;
 
   blender->out = (ImageF *)malloc(sizeof(ImageF));
   blender->final_out = (ImageS *)malloc(sizeof(ImageS));
@@ -128,15 +133,24 @@ void destroy_blender(Blender *blender) {
     free(blender->out_mask);
   }
 
-  free(blender->out_width_levels);
-  free(blender->out_height_levels);
+  if (blender->out_width_levels != NULL) {
+    free(blender->out_width_levels);
+  }
 
+  if (blender->out_height_levels != NULL) {
+    free(blender->out_height_levels);
+  }
   destroy_image(&blender->result);
-  destroy_image_s(blender->final_out);
+  if (blender->final_out != NULL) {
+    destroy_image_s(blender->final_out);
+  }
 
-  free(blender->img_laplacians);
-  free(blender->mask_gaussian);
-
+  if (blender->img_laplacians != NULL) {
+    free(blender->img_laplacians);
+  }
+  if (blender->mask_gaussian != NULL) {
+    free(blender->mask_gaussian);
+  }
   free(blender);
 }
 
@@ -344,7 +358,7 @@ int feather_feed(Blender *b, Image *img, Image *mask_img, Point tl) {
 
   for (int y = 0; y < img->height; y++) {
     for (int x = 0; x < img->width; x++) {
-      int image_pos = ((y * img->width ) + x) * RGB_CHANNELS;
+      int image_pos = ((y * img->width) + x) * RGB_CHANNELS;
       int mask_pos = (y * img->width) + x;
       int result_pos =
           ((x + tl.x) + ((y + tl.y) * b->output_size.width)) * RGB_CHANNELS;
@@ -466,6 +480,9 @@ void multi_band_blend(Blender *b) {
       &b->result, 0, max(0, b->result.height - b->real_out_size.height), 0,
       max(0, b->result.width - b->real_out_size.width), RGB_CHANNELS);
   free(blended_image.data);
+
+  destroy_image_s(&b->final_out[0]);
+  b->final_out = NULL;
 }
 
 void feather_blend(Blender *b) {
@@ -491,6 +508,7 @@ void feather_blend(Blender *b) {
 
   convert_images_to_image(&b->final_out[0], &b->result);
   destroy_image_s(&b->final_out[0]);
+  b->final_out = NULL;
 }
 
 void blend(Blender *b) {

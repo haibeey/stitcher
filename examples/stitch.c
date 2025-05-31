@@ -93,6 +93,12 @@ void test_feather(){
         }
     }
 
+    destroy_blender(b);
+    destroy_image(&img_buf1);
+    destroy_image(&img_buf2);
+    destroy_image(&mask1);
+    destroy_image(&mask2);
+
 
 }
 // naive testing
