@@ -25,6 +25,7 @@ typedef struct
     ImageS *mask_gaussian;
     BlenderType blender_type;
     float sharpness;
+    int do_distance_transform;
 } Blender;
 
 Blender *create_blender(BlenderType blender_type, Rect out_size, int nb);

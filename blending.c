@@ -110,6 +110,7 @@ Blender *create_feather_blender(Rect out_size) {
   blender->out[0] = create_empty_image_f(out_size.width, out_size.height, 3);
   blender->out_mask[0] =
       create_empty_image_f(out_size.width, out_size.height, 1);
+  blender->do_distance_transform = 0;
 
   return blender;
 }
@@ -354,7 +355,9 @@ clean:
 }
 
 int feather_feed(Blender *b, Image *img, Image *mask_img, Point tl) {
-  distance_transform(mask_img);
+  if (b->do_distance_transform) {
+    distance_transform(mask_img);
+  }
 
   for (int y = 0; y < img->height; y++) {
     for (int x = 0; x < img->width; x++) {
