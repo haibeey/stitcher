@@ -62,8 +62,8 @@ DEFINE_IMAGE_SIZE_FUNC(image_size, Image)
 DEFINE_IMAGE_SIZE_FUNC(image_size_s, ImageS)
 DEFINE_IMAGE_SIZE_FUNC(image_size_f, ImageF)
 
-Rect create_rect(int x, int y, int width, int height) {
-  Rect rect;
+StitchRect create_rect(int x, int y, int width, int height) {
+  StitchRect rect;
   rect.x = x;
   rect.y = y;
   rect.width = width;
@@ -71,8 +71,8 @@ Rect create_rect(int x, int y, int width, int height) {
   return rect;
 }
 
-Point br(Rect r) {
-  Point result;
+StitchPoint br(StitchRect r) {
+  StitchPoint result;
   result.x = r.x + r.width;
   result.y = r.y + r.height;
   return result;

@@ -10,7 +10,7 @@
 #include <string.h>
 #include <time.h>
 
-Blender *create_multi_band_blender(Rect out_size, int nb) {
+Blender *create_multi_band_blender(StitchRect out_size, int nb) {
 
   Blender *blender = (Blender *)malloc(sizeof(Blender));
   blender->blender_type = MULTIBAND;
@@ -81,7 +81,7 @@ Blender *create_multi_band_blender(Rect out_size, int nb) {
   return blender;
 }
 
-Blender *create_feather_blender(Rect out_size) {
+Blender *create_feather_blender(StitchRect out_size) {
   Blender *blender = (Blender *)malloc(sizeof(Blender));
   blender->blender_type = FEATHER;
   if (!blender)
@@ -115,7 +115,7 @@ Blender *create_feather_blender(Rect out_size) {
   return blender;
 }
 
-Blender *create_blender(BlenderType blenderType, Rect out_size, int nb) {
+Blender *create_blender(BlenderType blenderType, StitchRect out_size, int nb) {
   if (blenderType == MULTIBAND) {
     return create_multi_band_blender(out_size, nb);
   }
@@ -228,17 +228,17 @@ void *feed_worker(void *args) {
   return NULL;
 }
 
-int multi_band_feed(Blender *b, Image *img, Image *mask_img, Point tl) {
+int multi_band_feed(Blender *b, Image *img, Image *mask_img, StitchPoint tl) {
   ImageS images[b->num_bands + 1];
   int return_val = 1;
 
   int gap = 3 * (1 << b->num_bands);
-  Point tl_new, br_new;
+  StitchPoint tl_new, br_new;
 
   tl_new.x = max(b->output_size.x, tl.x - gap);
   tl_new.y = max(b->output_size.y, tl.y - gap);
 
-  Point br_point = br(b->output_size);
+  StitchPoint br_point = br(b->output_size);
   br_new.x = min(br_point.x, tl.x + img->width + gap);
   br_new.y = min(br_point.y, tl.y + img->height + gap);
 
@@ -354,7 +354,7 @@ clean:
   return return_val;
 }
 
-int feather_feed(Blender *b, Image *img, Image *mask_img, Point tl) {
+int feather_feed(Blender *b, Image *img, Image *mask_img, StitchPoint tl) {
   if (b->do_distance_transform) {
     distance_transform(mask_img);
   }
@@ -377,7 +377,7 @@ int feather_feed(Blender *b, Image *img, Image *mask_img, Point tl) {
   return 1;
 }
 
-int feed(Blender *b, Image *img, Image *mask_img, Point tl) {
+int feed(Blender *b, Image *img, Image *mask_img, StitchPoint tl) {
   assert(img->height == mask_img->height && img->width == mask_img->width);
   if (b->blender_type == MULTIBAND) {
     return multi_band_feed(b, img, mask_img, tl);

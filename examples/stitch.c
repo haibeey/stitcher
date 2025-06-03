@@ -18,7 +18,7 @@ void test_multiband(){
 
     int out = (img_buf1.width * 0.1f);
     int out_width = (img_buf1.width * 2) - (out * 2);
-    Rect out_size = {0, 0, out_width, img_buf1.height};
+    StitchRect out_size = {0, 0, out_width, img_buf1.height};
     int num_bands = 5;
 
     clock_gettime(CLOCK_MONOTONIC, &start);
@@ -28,14 +28,14 @@ void test_multiband(){
     printf("Elapsed time for creating blended: %.2f seconds\n", duration);
 
     clock_gettime(CLOCK_MONOTONIC, &start);
-    Point pt1 = {0, 0};
+    StitchPoint pt1 = {0, 0};
     feed(b, &img_buf1, &mask1, pt1);
     clock_gettime(CLOCK_MONOTONIC, &end);
     duration = (end.tv_sec - start.tv_sec) + (end.tv_nsec - start.tv_nsec) / 1e9;
     printf("Elapsed time for feed 1: %.2f seconds\n", duration);
 
     clock_gettime(CLOCK_MONOTONIC, &start);
-    Point pt2 = {img_buf2.width - out * 2  - 100 , 0};
+    StitchPoint pt2 = {img_buf2.width - out * 2  - 100 , 0};
     feed(b, &img_buf2, &mask2, pt2);
     clock_gettime(CLOCK_MONOTONIC, &end);
     duration = (end.tv_sec - start.tv_sec) + (end.tv_nsec - start.tv_nsec) / 1e9;
@@ -73,14 +73,14 @@ void test_feather(){
 
     int out = (img_buf1.width * 0.1f);
     int out_width = (img_buf1.width * 2) - (out * 2);
-    Rect out_size = {0, 0, out_width, img_buf1.height};
+    StitchRect out_size = {0, 0, out_width, img_buf1.height};
 
     Blender *b = create_blender(FEATHER,out_size, -1);
 
-    Point pt1 = {0, 0};
+    StitchPoint pt1 = {0, 0};
     feed(b, &img_buf1, &mask1, pt1);
 
-    Point pt2 = {img_buf2.width - out * 2  - 100 , 0};
+    StitchPoint pt2 = {img_buf2.width - out * 2  - 100 , 0};
     feed(b, &img_buf2, &mask2, pt2);
 
     blend(b);

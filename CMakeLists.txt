@@ -20,7 +20,7 @@ include_directories(
 )
 link_directories(${LIBJPEG_TURBO_LIB_DIR})
 
-add_library(${PROJECT_NAME} SHARED
+add_library(${PROJECT_NAME} STATIC
     image_operations.c
     blending.c
     jpeg.c

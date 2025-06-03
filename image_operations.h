@@ -39,7 +39,7 @@ typedef struct
 {
     int x;
     int y;
-} Point;
+} StitchPoint;
 
 typedef struct
 {
@@ -47,9 +47,9 @@ typedef struct
     int y;
     int width;
     int height;
-} Rect;
+} StitchRect;
 
-Point br(Rect r);
+StitchPoint br(StitchRect r);
 
 typedef struct
 {
