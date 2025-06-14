@@ -64,9 +64,9 @@ build_macos() {
 
 build_android() {
   echo "Building libjpeg-turbo for Android..."
-  for ARCH in arm64-v8a armeabi-v7a x86 x86_64; do
-    BUILD_DIR="$BUILD_DIR_LIB_TURBOJPEG/andriod/$ARCH"
-    INSTALL_DIR="$INSTALL_DIR_LIB_TURBOJPEG/andriod/$ARCH"
+  for ARCH in x86 x86_64; do
+    BUILD_DIR="$BUILD_DIR_LIB_TURBOJPEG/android/$ARCH"
+    INSTALL_DIR="$INSTALL_DIR_LIB_TURBOJPEG/android/$ARCH"
     mkdir -p "$BUILD_DIR"
 
 
@@ -109,14 +109,14 @@ build_android() {
       make install
     popd
 
-    BUILD_DIR="$BUILD_DIR_LIB_NATIVE_STITCHER/andriod/$ARCH"
-    INSTALL_DIR="$INSTALL_DIR_LIB_NATIVE_STITCHER/andriod/$ARCH"
+    BUILD_DIR="$BUILD_DIR_LIB_NATIVE_STITCHER/android/$ARCH"
+    INSTALL_DIR="$INSTALL_DIR_LIB_NATIVE_STITCHER/android/$ARCH"
     mkdir -p "$BUILD_DIR"
     mkdir -p "$INSTALL_DIR"
     pushd "$BUILD_DIR"
       cmake $CWD \
         -G"Unix Makefiles" \
-        -DLIBJPEG_TURBO_ROOT=$CWD/installs/libturbojpeg/andriod/$ARCH \
+        -DLIBJPEG_TURBO_ROOT=$CWD/installs/libturbojpeg/android/$ARCH \
         -DANDROID_ABI=$ARCH \
         -DCMAKE_SYSTEM_PROCESSOR=$ARCH \
         -DANDROID_TOOLCHAIN=$ANDROID_NDK/toolchains/llvm/prebuilt/darwin-x86_64/bin/clang \
