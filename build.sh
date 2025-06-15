@@ -64,7 +64,7 @@ build_macos() {
 
 build_android() {
   echo "Building libjpeg-turbo for Android..."
-  for ARCH in x86 x86_64; do
+  for ARCH in arm64-v8a armeabi-v7a x86 x86_64; do
     BUILD_DIR="$BUILD_DIR_LIB_TURBOJPEG/android/$ARCH"
     INSTALL_DIR="$INSTALL_DIR_LIB_TURBOJPEG/android/$ARCH"
     mkdir -p "$BUILD_DIR"
