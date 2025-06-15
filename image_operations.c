@@ -102,7 +102,7 @@ int convolve_1d_v_simd(int x, int width, int *row0, int *row1, int *row2,
     simde__m128i hi16 = simde_mm256_extracti128_si256(sum, 1);
     simde__m128i packed = simde_mm_packs_epi32(lo16, hi16);
     simde__m128i out8 = simde_mm_packus_epi16(packed, packed);
-    simde_mm_storeu_si128((simde__m128i *)out_row, out8);
+    simde_mm_storel_epi64((simde__m128i *)out_row, out8);
 
     out_row += 8;
   }
