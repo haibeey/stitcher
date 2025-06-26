@@ -5,7 +5,7 @@
 #include <unistd.h>
 #endif
 
-int get_cpus_count()
+int get_no_of_cpu()
 {
 #if defined(_WIN32) || defined(_WIN64)
     SYSTEM_INFO sysinfo;
@@ -16,6 +16,11 @@ int get_cpus_count()
 #else
     return 1;
 #endif
+}
+
+int get_cpus_count()
+{
+    return (get_no_of_cpu() / 2) + 1;
 }
 
 int clamp(int value, int min, int max)

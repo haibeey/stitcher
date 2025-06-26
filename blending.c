@@ -355,27 +355,42 @@ clean:
 }
 
 int feather_feed(Blender *b, Image *img, Image *mask_img, StitchPoint tl) {
-  if (b->do_distance_transform) {
-    distance_transform(mask_img);
-  }
-
-  for (int y = 0; y < img->height; y++) {
-    for (int x = 0; x < img->width; x++) {
-      int image_pos = ((y * img->width) + x) * RGB_CHANNELS;
-      int mask_pos = (y * img->width) + x;
-      int result_pos =
-          ((x + tl.x) + ((y + tl.y) * b->output_size.width)) * RGB_CHANNELS;
-      int result_mask_pos = ((x + tl.x) + ((y + tl.y) * b->output_size.width));
-      float w = mask_img->data[mask_pos] / 256.0;
-      b->out_mask->data[result_mask_pos] += w;
-      for (int z = 0; z < RGB_CHANNELS; z++) {
-        b->out->data[result_pos + z] += img->data[image_pos + z] * w;
-      }
+    if (b->do_distance_transform) {
+        distance_transform(mask_img);
     }
-  }
 
-  return 1;
+    const int out_w   = b->output_size.width;
+    const int out_h   = b->output_size.height;
+    const int in_w    = img->width;
+    const int in_h    = img->height;
+    const int mask_w  = mask_img->width;
+
+    for (int y = 0; y < in_h; y++) {
+        int out_y = y + tl.y;
+        if (out_y < 0 || out_y >= out_h) continue;
+
+        for (int x = 0; x < in_w; x++) {
+            int out_x    = x + tl.x;
+            if (out_x < 0 || out_x >= out_w) continue;
+
+            int image_pos = (y * in_w + x) * RGB_CHANNELS;
+            int mask_pos  = y * mask_w + x;
+            int dst_idx   = (out_y * out_w + out_x) * RGB_CHANNELS;
+            int dst_mask  = out_y * out_w + out_x;
+
+            float weight = mask_img->data[mask_pos] / 255.0f;
+            b->out_mask->data[dst_mask] += weight;
+
+            for (int channel = 0; channel < RGB_CHANNELS; channel++) {
+                b->out->data[dst_idx + channel] +=
+                    img->data[image_pos + channel] * weight;
+            }
+        }
+    }
+
+    return 1;
 }
+
 
 int feed(Blender *b, Image *img, Image *mask_img, StitchPoint tl) {
   assert(img->height == mask_img->height && img->width == mask_img->width);
