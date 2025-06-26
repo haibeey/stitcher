@@ -437,6 +437,11 @@ DEFINE_DOWNSAMPLE_WORKER_FUNC(down_sample_operation_s, ImageS, short)
 #define DEFINE_DOWNSAMPLE_FUNC(NAME, IMAGE_T, PIXEL_T, IMAGE_T_ENUM)           \
   IMAGE_T NAME(IMAGE_T *img) {                                                 \
     IMAGE_T result;                                                            \
+    if (img->width <= 0 || img->height <= 0) {                                 \
+      result.data = NULL;                                                      \
+      result.width = result.height = result.channels = 0;                      \
+      return result;                                                           \
+    }                                                                          \
     int new_width = img->width / 2;                                            \
     int new_height = img->height / 2;                                          \
     PIXEL_T *downsampled = (PIXEL_T *)malloc(new_width * new_height *          \
@@ -507,6 +512,11 @@ DEFINE_UPSAMPLE_WORKER_FUNC(upsample_worker_f, ImageF, float)
 #define DEFINE_UPSAMPLE_FUNC(NAME, IMAGE_T, PIXEL_T, IMAGE_T_ENUM)             \
   IMAGE_T NAME(IMAGE_T *img, float upsample_factor) {                          \
     IMAGE_T result;                                                            \
+    if (img->width <= 0 || img->height <= 0) {                                 \
+      result.data = NULL;                                                      \
+      result.width = result.height = result.channels = 0;                      \
+      return result;                                                           \
+    }                                                                          \
     int new_width = img->width * 2;                                            \
     int new_height = img->height * 2;                                          \
     PIXEL_T *upsampled = (PIXEL_T *)calloc(                                    \
@@ -553,7 +563,7 @@ void distance_transform(Image *mask) {
     }
   }
 
-float max = -1.0f;
+  float max = -1.0f;
   for (y = 0; y < mask->height; y++) {
     for (x = 0; x < mask->width; x++) {
       float current = dst.data[y * mask->width + x];
@@ -613,13 +623,12 @@ float max = -1.0f;
     }
   }
 
-
   for (int y = 0; y < mask->height; y++) {
     for (int x = 0; x < mask->width; x++) {
 
       mask->data[y * mask->width + x] = dst.data[y * mask->width + x] == 0.0f
                                             ? mask->data[y * mask->width + x]
-                                            :  dst.data[y * mask->width + x];
+                                            : dst.data[y * mask->width + x];
     }
   }
 

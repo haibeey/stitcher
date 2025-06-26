@@ -19,3 +19,4 @@ test
 example.c
 example
 iosbuild/*
+examples/downsampled
