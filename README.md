@@ -4,7 +4,7 @@ It enables seamless blending of overlapping images, useful for applications such
 
 ---
 
-## 🚧 Building
+## Building
 A helper script (`build.sh`) is included to streamline the build process for different platforms.
 Use this script to build or clean the project easily.
 
@@ -18,7 +18,7 @@ Use this script to build or clean the project easily.
   ./build.sh build ios
   ```
 
-# 🧪 Testing
+# Testing
 
 To verify the functionality of **NativeSticher**, follow the instructions below based on your setup.
 
